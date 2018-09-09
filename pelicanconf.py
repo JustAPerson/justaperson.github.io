@@ -19,8 +19,11 @@ TRANSLATION_FEED_ATOM = None
 AUTHOR_FEED_ATOM = None
 AUTHOR_FEED_RSS = None
 
-MENUITEMS = [("Home", "/"),
-            ("Perf Wiki", "/pages/perf/index.html")]
+MENUITEMS = [
+    ("Home", "/"),
+    ("Wiki", "/wiki/"),
+    ("Resume", "/pdfs/jpriest_resume_fall_2017.pdf"),
+]
 
 # Blogroll
 LINKS = ()
@@ -40,6 +43,9 @@ STATIC_PATHS = ['pdfs']
 
 DISPLAY_PAGES_ON_MENU = False
 DISPLAY_CATEGORIES_ON_MENU = False
+
+PAGE_URL="{slug}.html"
+PAGE_SAVE_AS=PAGE_URL
 
 # Uncomment following line if you want document-relative URLs when developing
 #RELATIVE_URLS = True

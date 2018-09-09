@@ -75,6 +75,6 @@ stopserver:
 # 	$(PELICAN) $(INPUTDIR) -o $(OUTPUTDIR) -s $(PUBLISHCONF) $(PELICANOPTS)
 
 push:
-  ghp-import -c www.jpriest.me -p -b master output
+	ghp-import -c www.jpriest.me -p -f -b master output
 
 .PHONY: html help clean regenerate serve serve-global devserver stopserver publish
