@@ -77,4 +77,9 @@ stopserver:
 push:
 	ghp-import -c www.jpriest.me -p -f -b master output
 
+html regenerate serve serve-global devserver: plugins
+plugins:
+	git submodule init
+	git submodule update
+
 .PHONY: html help clean regenerate serve serve-global devserver stopserver publish
