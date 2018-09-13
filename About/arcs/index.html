@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>ARCS</title>
+        <link rel="stylesheet" href="/theme/css/main.css" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="/">Pursuing Fast </a></h1>
+                <nav><ul>
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/wiki/">Wiki</a></li>
+                    <li><a href="/projects/">Projects</a></li>
+                    <li><a href="/pdfs/jpriest_resume_fall_2017.pdf">Resume</a></li>
+                    <li><a href="/about/">About</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+    <h1 class="entry-title">ARCS</h1>
+    
+    <p>This is the earliest code I wrote that I can still find. Judging by one of the
+timestamps, I was around 13 at the time. I also happened to have an interest in
+cryptography then. My dad gave me a copy of Bruce Schneier's <em>Applied
+Cryptography</em>. I tried reading the AES and SHA2 specs. SHA2 I came close to
+implementing correctly, but I couldn't wrap my head around the math of AES's
+sbox.</p>
+<p>It took another two years before I managed a <a href="https://github.com/JustAPerson/LuaCrypt/blob/master/sha2.lua">correct SHA256
+implementation</a> (minus <a href="https://github.com/JustAPerson/LuaCrypt/commit/a1a80d21c600aaa8164a31fd8c85f8b32453f7e7">one <em>tiny</em> edge case</a>).</p>
+<p>Below you will find something vaguely inspired by SHA256 and AES256. Marvel in
+the horrible security implications of a fixed-format-non-random initial vector
+paired with CBC mode. Also find amusement in implementing bitwise operators as
+functions over strings since Lua 5.1 does not have native bit operators.</p>
+<div class="highlight"><pre><span></span><span class="cm">--[[</span>
+
+<span class="cm">the Advanced Roblox CryptoSystem, or ARCS, is being designed to bring better security to roblox games, such as private servers.</span>
+<span class="cm">While still in its infancy, hopefully one day, ARCS will become a suitable means of data encryption.</span>
+
+<span class="cm">ARCS currently supplies 2 features.</span>
+
+<span class="cm">A secure Hash function,</span>
+<span class="cm">And secure encryption algorithm.</span>
+
+
+<span class="cm">The secure Hash algorithm (A SHA256 variant), can be called with the Hash() function.</span>
+<span class="cm">It has 1 input, which is the text to be hashed.</span>
+
+<span class="cm">print(ARCS.Hash(&quot;Some Random Data&quot;))</span>
+<span class="cm">--&gt;28551017D06B84BD97742D373E60D4CF6D1D863E3817A7CB7058B824204194A6</span>
+
+
+<span class="cm">ARCS also includes the ARCS Cipher, is a (hopefully) secure encryption algorithm.</span>
+<span class="cm">The cipher has 3 inputs, the text to be encrypted, the key to use, and the number of rounds (optional)</span>
+<span class="cm">You can use ARCS.CipherEN to encrypt, and ARCS.CipherDE to decrypt</span>
+
+<span class="cm">print(ARCS.CipherEN(&quot;HOLY SHNAPPLE&quot;,&quot;WHAT 9000!?!?!?&quot;))</span>
+<span class="cm">--&gt;36FF255D11705BDF5939208F7C25BE54B20992B45265ACE387551AE4798D5D5F</span>
+
+<span class="cm">print(ARCS.CipherDE(&quot;36FF255D11705BDF5E12208C7C25BE5493BE8F2C200F55FC26CD2C3EE4D49D6E&quot;,&quot;WHAT 9000!?!?!?&quot;))</span>
+<span class="cm">--&gt;HOLY SHNAPPLE    08/16/10 13:53:42 0016</span>
+
+<span class="cm">(The number of rounds is -not- required when decrypting, even if the string has been encrypted with more than 16)</span>
+
+<span class="cm">the decryption function will return two strings, the decrypted text, and the decrypted header.</span>
+<span class="cm">The header is a 16 character string of text included at the begining of the cipher text.</span>
+<span class="cm">The header includes the time and date of when the encryption was started for that string, and </span>
+<span class="cm">the number of rounds it was encrypted with.</span>
+
+<span class="cm">Currently, the ARCS cipher is a variable strength cipher, in the sense, that you can use more rounds in the encryption.</span>
+<span class="cm">The main portion of the encryption consits of a function that systematically encrypts the text.</span>
+<span class="cm">When you encrypt something, its encrypted in stages, each stage is a round. Each round is just the main portion of the cipher,</span>
+<span class="cm">but it is repeated over and over again to offer more security. There is a mininum of 16 rounds, and a maximum of 9999.</span>
+
+<span class="cm">It should also be noted that the header string is always encrypted with 16 rounds, which is strong enough to protect the inocous data</span>
+<span class="cm">held within it.</span>
+
+<span class="cm">The ARCS Cipher currently is not exactly how I would like it to be, so there will most likely be several updates in the comming days,</span>
+<span class="cm">to improve security, and efficiency.</span>
+
+<span class="cm">Please check back every once in a while to ensure that you are using the most up-to-date version of ARCS.</span>
+
+<span class="cm">]]</span><span class="p">)</span><span class="c1">--</span>
+
+<span class="n">ARCS</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">ARCS</span><span class="p">.</span><span class="n">Name</span> <span class="o">=</span> <span class="s2">&quot;ARCS - Advanced Roblox CryptoSystem&quot;</span>
+
+<span class="kr">function</span> <span class="nf">XOR</span><span class="p">(</span><span class="n">in1</span><span class="p">,</span> <span class="n">in2</span><span class="p">)</span>
+    <span class="n">final</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="o">#</span><span class="n">in1</span> <span class="kr">do</span>
+        <span class="n">x1</span> <span class="o">=</span> <span class="n">in1</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+        <span class="n">x2</span> <span class="o">=</span> <span class="n">in2</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+        <span class="kr">if</span> <span class="n">x1</span> <span class="o">==</span> <span class="n">x2</span> <span class="kr">then</span>
+            <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="s2">&quot;0&quot;</span>
+        <span class="kr">else</span>
+            <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="s2">&quot;1&quot;</span>
+        <span class="kr">end</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">final</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">AND</span><span class="p">(</span><span class="n">in1</span><span class="p">,</span> <span class="n">in2</span><span class="p">)</span>
+    <span class="n">final</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="o">#</span><span class="n">in1</span><span class="o">/</span><span class="mi">8</span> <span class="kr">do</span>
+        <span class="n">x1</span> <span class="o">=</span> <span class="n">in1</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">8</span><span class="o">-</span><span class="mi">7</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">8</span><span class="p">)</span>
+        <span class="n">x2</span> <span class="o">=</span> <span class="n">in2</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">8</span><span class="o">-</span><span class="mi">7</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">8</span><span class="p">)</span>
+        <span class="kd">local</span> <span class="n">out</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">8</span> <span class="kr">do</span>
+            <span class="n">i1</span> <span class="o">=</span> <span class="n">x1</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+            <span class="n">i2</span> <span class="o">=</span> <span class="n">x1</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+            <span class="kr">if</span> <span class="n">i1</span> <span class="o">==</span> <span class="n">i2</span> <span class="kr">then</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">out</span> <span class="o">..</span> <span class="s2">&quot;1&quot;</span>
+            <span class="kr">elseif</span> <span class="n">i1</span> <span class="o">~=</span> <span class="n">i2</span> <span class="kr">then</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">out</span> <span class="o">..</span> <span class="s2">&quot;0&quot;</span>
+            <span class="kr">end</span>
+        <span class="kr">end</span>
+        <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="n">out</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">final</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">NOT</span><span class="p">(</span><span class="n">in1</span><span class="p">)</span>
+    <span class="n">final</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="o">#</span><span class="n">in1</span><span class="o">/</span><span class="mi">8</span> <span class="kr">do</span>
+        <span class="n">x1</span> <span class="o">=</span> <span class="n">in1</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">8</span><span class="o">-</span><span class="mi">7</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">8</span><span class="p">)</span>
+        <span class="kd">local</span> <span class="n">out</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">8</span> <span class="kr">do</span>
+            <span class="n">i1</span> <span class="o">=</span> <span class="n">x1</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+            <span class="n">i2</span> <span class="o">=</span> <span class="n">x1</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+            <span class="kr">if</span> <span class="n">i1</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span> <span class="kr">then</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">out</span> <span class="o">..</span> <span class="s2">&quot;0&quot;</span>
+            <span class="kr">else</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">out</span> <span class="o">..</span> <span class="s2">&quot;1&quot;</span>
+            <span class="kr">end</span>
+        <span class="kr">end</span>
+        <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="n">out</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">final</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">OR</span><span class="p">(</span><span class="n">in1</span><span class="p">,</span><span class="n">in2</span><span class="p">)</span>
+    <span class="kd">local</span> <span class="n">out</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">8</span> <span class="kr">do</span>
+        <span class="n">i1</span> <span class="o">=</span> <span class="n">in1</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+        <span class="n">i2</span> <span class="o">=</span> <span class="n">in2</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">)</span>
+        <span class="kr">if</span> <span class="n">i1</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span> <span class="ow">or</span> <span class="n">i2</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span> <span class="kr">then</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">out</span>  <span class="o">..</span> <span class="s2">&quot;1&quot;</span>
+        <span class="kr">else</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">out</span> <span class="o">..</span> <span class="s2">&quot;0&quot;</span>
+        <span class="kr">end</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">out</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">LeftShift</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">y</span><span class="o">=#</span><span class="n">x</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="mi">32</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">x</span> <span class="o">..</span> <span class="nb">string.rep</span><span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">,</span><span class="mi">32</span><span class="o">-#</span><span class="n">x</span><span class="p">)</span>
+    <span class="kr">return</span> <span class="n">x</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">RightShift</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">y</span><span class="o">=#</span><span class="n">x</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="nb">string.rep</span><span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">,</span><span class="mi">32</span><span class="o">-</span><span class="n">n</span><span class="p">)</span> <span class="o">..</span> <span class="n">x</span>
+    <span class="kr">return</span> <span class="n">x</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">RightRotate</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="n">n</span><span class="p">)</span>
+    <span class="kr">return</span> <span class="n">x</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="o">#</span><span class="n">x</span><span class="p">)</span> <span class="o">..</span> <span class="n">x</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">n</span><span class="p">)</span>
+<span class="kr">end</span>
+
+
+<span class="kr">function</span> <span class="nf">moduloAdd</span><span class="p">(</span><span class="n">txt1</span><span class="p">,</span><span class="n">txt2</span><span class="p">,</span><span class="n">x</span><span class="p">)</span>
+    <span class="kr">if</span> <span class="ow">not</span> <span class="n">x</span> <span class="kr">then</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">32</span> <span class="kr">end</span>
+    <span class="n">txt1</span> <span class="o">=</span> <span class="n">bToDec</span><span class="p">(</span><span class="n">txt1</span><span class="p">)</span>
+    <span class="n">txt2</span> <span class="o">=</span> <span class="n">bToDec</span><span class="p">(</span><span class="n">txt2</span><span class="p">)</span>
+    <span class="n">txt</span> <span class="o">=</span> <span class="p">(</span><span class="n">txt1</span> <span class="o">+</span> <span class="n">txt2</span><span class="p">)</span> <span class="o">%</span> <span class="mi">2</span><span class="o">^</span><span class="n">x</span>
+    <span class="n">final</span> <span class="o">=</span> <span class="n">nToBin</span><span class="p">(</span><span class="n">txt</span><span class="p">,</span><span class="n">x</span><span class="p">)</span>
+    <span class="kr">return</span> <span class="n">final</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">columTran</span><span class="p">(</span><span class="n">txt</span><span class="p">)</span>
+    <span class="kd">local</span> <span class="n">tmp</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">16</span> <span class="kr">do</span>
+        <span class="n">tmp</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">txt</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="o">*</span><span class="mi">8</span><span class="o">-</span><span class="mi">7</span><span class="p">,</span><span class="n">i</span><span class="o">*</span><span class="mi">8</span><span class="p">)</span>
+    <span class="kr">end</span>
+    <span class="kd">local</span> <span class="n">final</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kd">local</span> <span class="n">x</span><span class="p">,</span><span class="n">y</span>  <span class="o">=</span> <span class="o">-</span><span class="mi">3</span><span class="p">,</span><span class="mi">1</span>
+    <span class="kr">repeat</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span> <span class="o">+</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="kr">if</span> <span class="n">x</span> <span class="o">&gt;</span> <span class="mi">16</span> <span class="kr">then</span>
+            <span class="n">y</span> <span class="o">=</span> <span class="n">y</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">y</span>
+        <span class="kr">end</span>
+        <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="n">tmp</span><span class="p">[</span><span class="n">x</span><span class="p">]</span>
+    <span class="kr">until</span> <span class="n">x</span> <span class="o">==</span> <span class="mi">16</span>
+    <span class="kr">return</span> <span class="n">final</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">shiftRow</span><span class="p">(</span><span class="n">txt</span><span class="p">,</span><span class="n">way</span><span class="p">)</span>
+    <span class="kr">if</span> <span class="ow">not</span> <span class="n">way</span> <span class="kr">then</span>
+        <span class="kd">local</span> <span class="n">tmp</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span> <span class="kr">do</span>
+            <span class="n">tmp</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">txt</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="o">*</span><span class="mi">32</span><span class="o">-</span><span class="mi">31</span><span class="p">,</span><span class="n">i</span><span class="o">*</span><span class="mi">32</span><span class="p">)</span>
+        <span class="kr">end</span>
+        <span class="n">tmp</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">tmp</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span><span class="mi">8</span><span class="p">)</span>
+        <span class="n">tmp</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">tmp</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span><span class="mi">16</span><span class="p">)</span>
+        <span class="n">tmp</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">tmp</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span><span class="mi">24</span><span class="p">)</span>
+        <span class="kr">return</span> <span class="nb">table.concat</span><span class="p">(</span><span class="n">tmp</span><span class="p">)</span>
+    <span class="kr">elseif</span> <span class="n">way</span> <span class="kr">then</span>
+        <span class="kd">local</span> <span class="n">tmp</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span> <span class="kr">do</span>
+            <span class="n">tmp</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">txt</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="o">*</span><span class="mi">32</span><span class="o">-</span><span class="mi">31</span><span class="p">,</span><span class="n">i</span><span class="o">*</span><span class="mi">32</span><span class="p">)</span>
+        <span class="kr">end</span>
+        <span class="n">tmp</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">tmp</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span><span class="mi">24</span><span class="p">)</span>
+        <span class="n">tmp</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">tmp</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span><span class="mi">16</span><span class="p">)</span>
+        <span class="n">tmp</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">tmp</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span><span class="mi">8</span><span class="p">)</span>
+        <span class="kr">return</span> <span class="nb">table.concat</span><span class="p">(</span><span class="n">tmp</span><span class="p">)</span>
+    <span class="kr">end</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">cToHex</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="n">final</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="o">#</span><span class="n">text</span> <span class="kr">do</span>
+        <span class="n">work</span> <span class="o">=</span> <span class="nb">string.format</span><span class="p">(</span><span class="s2">&quot;%X&quot;</span><span class="p">,</span><span class="n">text</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">):</span><span class="n">byte</span><span class="p">())</span>
+        <span class="kr">if</span> <span class="o">#</span><span class="n">work</span> <span class="o">==</span> <span class="mi">1</span> <span class="kr">then</span>
+            <span class="n">work</span> <span class="o">=</span> <span class="s2">&quot;0&quot;</span><span class="o">..</span><span class="n">work</span>
+        <span class="kr">end</span>
+        <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="n">work</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">final</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">hToBin</span><span class="p">(</span><span class="n">char</span><span class="p">)</span>
+    <span class="kd">local</span> <span class="n">final</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="o">#</span><span class="n">char</span><span class="o">/</span><span class="mi">2</span> <span class="kr">do</span>
+        <span class="kd">local</span> <span class="n">fix</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">fix</span> <span class="o">=</span> <span class="nb">tonumber</span><span class="p">(</span><span class="n">char</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="p">),</span><span class="mi">16</span><span class="p">)</span>
+        <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="n">nToBin</span><span class="p">(</span><span class="n">fix</span><span class="p">)</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">final</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">nToBin</span><span class="p">(</span><span class="n">Decimal</span><span class="p">,</span><span class="n">x</span><span class="p">)</span>
+    <span class="kr">if</span> <span class="n">x</span> <span class="o">==</span> <span class="kc">nil</span> <span class="kr">then</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">8</span> <span class="kr">end</span>
+    <span class="kd">local</span> <span class="n">BinaryRep</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kd">local</span> <span class="n">Number</span> <span class="o">=</span> <span class="n">Decimal</span>
+    <span class="kr">while</span> <span class="n">Number</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="kr">do</span>
+        <span class="n">BinaryRep</span> <span class="o">=</span> <span class="n">BinaryRep</span> <span class="o">..</span> <span class="n">Number</span> <span class="o">%</span> <span class="mi">2</span>
+        <span class="n">Number</span> <span class="o">=</span> <span class="nb">math.floor</span><span class="p">(</span><span class="n">Number</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">Decimal</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">):</span><span class="n">rep</span><span class="p">(</span><span class="n">x</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">..</span> <span class="s2">&quot;1&quot;</span> <span class="ow">or</span> <span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">):</span><span class="n">rep</span><span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">BinaryRep</span><span class="p">:</span><span class="n">len</span><span class="p">())</span> <span class="o">..</span> <span class="n">BinaryRep</span><span class="p">:</span><span class="n">reverse</span><span class="p">()</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">nToHex</span><span class="p">(</span><span class="n">num</span><span class="p">)</span>
+    <span class="kr">return</span> <span class="nb">string.format</span><span class="p">(</span><span class="s2">&quot;%X&quot;</span><span class="p">,</span><span class="n">num</span><span class="p">)</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">bToHex</span><span class="p">(</span><span class="n">txt</span><span class="p">)</span>
+    <span class="n">rfinal</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="o">#</span><span class="n">txt</span><span class="o">/</span><span class="mi">8</span> <span class="kr">do</span>
+        <span class="n">bin</span> <span class="o">=</span> <span class="nb">tostring</span><span class="p">(</span><span class="n">txt</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">8</span><span class="o">-</span><span class="mi">7</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">8</span><span class="p">))</span>
+        <span class="kd">local</span> <span class="n">final</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">8</span><span class="p">,</span><span class="mi">4</span> <span class="kr">do</span>
+            <span class="kd">local</span> <span class="n">fix</span> <span class="o">=</span> <span class="n">bin</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="o">+</span><span class="mi">3</span><span class="p">)</span>
+            <span class="kd">local</span> <span class="n">subtotal</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="kd">local</span> <span class="n">o</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span> <span class="kr">do</span>
+                <span class="kd">local</span> <span class="n">fx</span> <span class="o">=</span> <span class="n">fix</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="p">,</span><span class="n">u</span><span class="p">)</span>
+                <span class="kr">if</span> <span class="n">fx</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span> <span class="kr">then</span>
+                    <span class="n">subtotal</span> <span class="o">=</span> <span class="n">subtotal</span> <span class="o">+</span> <span class="mi">2</span><span class="o">^</span><span class="p">(</span><span class="n">o</span><span class="p">)</span>
+                <span class="kr">end</span>
+                <span class="n">o</span> <span class="o">=</span> <span class="n">o</span> <span class="o">+</span><span class="mi">1</span>
+            <span class="kr">end</span>
+            <span class="kr">if</span> <span class="n">subtotal</span> <span class="o">&gt;</span> <span class="mi">9</span> <span class="kr">then</span>
+                <span class="n">subtotal</span> <span class="o">=</span> <span class="nb">string.char</span><span class="p">(</span><span class="n">subtotal</span><span class="o">+</span><span class="mi">55</span><span class="p">)</span>
+            <span class="kr">end</span>
+            <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="n">subtotal</span>
+        <span class="kr">end</span>
+        <span class="n">rfinal</span> <span class="o">=</span> <span class="n">rfinal</span> <span class="o">..</span> <span class="n">final</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">rfinal</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">hToDec</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="kr">return</span> <span class="nb">tonumber</span><span class="p">(</span><span class="n">text</span><span class="p">,</span><span class="mi">16</span><span class="p">)</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">bToDec</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="kr">return</span> <span class="nb">tonumber</span><span class="p">(</span><span class="n">text</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">hToChar</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="n">final</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="o">#</span><span class="n">text</span><span class="o">/</span><span class="mi">2</span> <span class="kr">do</span>
+        <span class="n">work</span> <span class="o">=</span> <span class="n">text</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="n">i</span><span class="o">*</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">work</span> <span class="o">=</span> <span class="n">hToDec</span><span class="p">(</span><span class="n">work</span><span class="p">)</span>
+        <span class="n">work</span> <span class="o">=</span> <span class="nb">string.char</span><span class="p">(</span><span class="n">work</span><span class="p">)</span>
+        <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="n">work</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">final</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">bToChar</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="n">final</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="o">#</span><span class="n">text</span><span class="o">/</span><span class="mi">8</span> <span class="kr">do</span>
+        <span class="n">work</span> <span class="o">=</span> <span class="n">text</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="o">*</span><span class="mi">8</span><span class="o">-</span><span class="mi">7</span><span class="p">,</span><span class="n">i</span><span class="o">*</span><span class="mi">8</span><span class="p">)</span>
+        <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="nb">string.char</span><span class="p">(</span><span class="nb">tonumber</span><span class="p">(</span><span class="n">work</span><span class="p">,</span><span class="mi">2</span><span class="p">))</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">final</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">cToBin</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="n">final</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="o">#</span><span class="n">text</span> <span class="kr">do</span>
+        <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="n">nToBin</span><span class="p">(</span><span class="n">text</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">i</span><span class="p">):</span><span class="n">byte</span><span class="p">())</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">final</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">sMod</span><span class="p">(</span><span class="n">num</span><span class="p">,</span><span class="n">base</span><span class="p">)</span>
+    <span class="kr">if</span> <span class="n">num</span> <span class="o">==</span> <span class="n">base</span> <span class="kr">then</span>
+        <span class="kr">return</span> <span class="mi">1</span>
+    <span class="kr">else</span>
+        <span class="kr">return</span> <span class="n">num</span> <span class="o">%</span> <span class="n">base</span>
+    <span class="kr">end</span>
+<span class="kr">end</span>
+
+
+<span class="kr">function</span> <span class="nf">XinY</span><span class="p">(</span><span class="n">num</span><span class="p">,</span><span class="n">base</span><span class="p">)</span>
+    <span class="kd">local</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="kr">while</span> <span class="n">num</span> <span class="o">&gt;=</span> <span class="n">base</span> <span class="kr">do</span>
+        <span class="n">num</span> <span class="o">=</span> <span class="n">num</span> <span class="o">-</span> <span class="n">base</span>
+        <span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="o">+</span><span class="mi">1</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">x</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">nextInt</span><span class="p">(</span><span class="n">num</span><span class="p">,</span><span class="n">base</span><span class="p">)</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">XinY</span><span class="p">(</span><span class="n">num</span><span class="p">,</span><span class="n">base</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="kr">return</span> <span class="n">base</span><span class="o">*</span><span class="n">y</span> <span class="o">-</span> <span class="n">num</span>
+<span class="kr">end</span>
+
+
+<span class="n">Blocks</span><span class="o">=</span><span class="p">{}</span>
+<span class="n">HVal</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">Blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">Constants</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01000010100010100010111110011000&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01110001001101110100010010010001&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10110101110000001111101111001111&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11101001101101011101101110100101&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00111001010101101100001001011011&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01011001111100010001000111110001&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10010010001111111000001010100100&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">7</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10101011000111000101111011010101&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">8</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11011000000001111010101010011000&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">9</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00010010100000110101101100000001&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">10</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00100100001100011000010110111110&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">11</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01010101000011000111110111000011&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">12</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01110010101111100101110101110100&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">13</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10000000110111101011000111111110&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">14</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10011011110111000000011010100111&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">15</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11000001100110111111000101110100&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">16</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11100100100110110110100111000001&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">17</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11101111101111100100011110000110&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">18</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00001111110000011001110111000110&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">19</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00100100000011001010000111001100&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">20</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00101101111010010010110001101111&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">21</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01001010011101001000010010101010&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">22</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01011100101100001010100111011100&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">23</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01110110111110011000100011011010&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">24</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10011000001111100101000101010010&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">25</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10101000001100011100011001101101&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">26</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10110000000000110010011111001000&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">27</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10111111010110010111111111000111&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">28</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11000110111000000000101111110011&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">29</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11010101101001111001000101000111&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">30</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00000110110010100110001101010001&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">31</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00010100001010010010100101100111&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">32</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00100111101101110000101010000101&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">33</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00101110000110110010000100111000&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">34</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01001101001011000110110111111100&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">35</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01010011001110000000110100010011&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">36</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01100101000010100111001101010100&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">37</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01110110011010100000101010111011&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">38</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10000001110000101100100100101110&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">39</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10010010011100100010110010000101&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">40</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10100010101111111110100010100001&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">41</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10101000000110100110011001001011&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">42</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11000010010010111000101101110000&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">43</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11000111011011000101000110100011&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">44</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11010001100100101110100000011001&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">45</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11010110100110010000011000100100&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">46</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11110100000011100011010110000101&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">47</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00010000011010101010000001110000&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">48</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00011001101001001100000100010110&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">49</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00011110001101110110110000001000&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">50</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00100111010010000111011101001100&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">51</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00110100101100001011110010110101&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">52</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00111001000111000000110010110011&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">53</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01001110110110001010101001001010&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">54</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01011011100111001100101001001111&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">55</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01101000001011100110111111110011&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">56</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01110100100011111000001011101110&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">57</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01111000101001010110001101101111&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">58</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10000100110010000111100000010100&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">59</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10001100110001110000001000001000&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">60</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10010000101111101111111111111010&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">61</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10100100010100000110110011101011&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">62</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10111110111110011010001111110111&quot;</span>
+<span class="n">Constants</span><span class="p">[</span><span class="mi">63</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;11000110011100010111100011110010&quot;</span>
+
+<span class="kr">function</span> <span class="nf">miniReset</span><span class="p">()</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">7</span> <span class="kr">do</span>
+        <span class="n">HVal</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">Blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">i</span><span class="p">]</span>
+    <span class="kr">end</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">largeReset</span><span class="p">()</span>
+    <span class="n">Blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01101010000010011110011001100111&quot;</span>
+    <span class="n">Blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10111011011001111010111010000101&quot;</span>
+    <span class="n">Blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00111100011011101111001101110010&quot;</span>
+    <span class="n">Blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10100101010011111111010100111010&quot;</span>
+    <span class="n">Blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01010001000011100101001001111111&quot;</span>
+    <span class="n">Blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">5</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;10011011000001010110100010001100&quot;</span>
+    <span class="n">Blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">6</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;00011111100000111101100110101011&quot;</span>
+    <span class="n">Blocks</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">7</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;01011011111000001100110100011001&quot;</span>
+<span class="kr">end</span>
+
+<span class="n">largeReset</span><span class="p">()</span>
+<span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">63</span> <span class="kr">do</span> <span class="n">Constants</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">hToBin</span><span class="p">(</span><span class="n">Constants</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nc">ARCS</span><span class="p">.</span><span class="nf">Hash</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="nb">tostring</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="c1">--String preprocessing</span>
+    <span class="kd">local</span> <span class="n">tmp</span> <span class="o">=</span> <span class="n">cToBin</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="n">tml</span> <span class="o">=</span> <span class="o">#</span><span class="n">tmp</span>
+    <span class="kd">local</span> <span class="n">nextI</span> <span class="o">=</span> <span class="n">nextInt</span><span class="p">(</span><span class="n">tml</span><span class="o">+</span><span class="mi">65</span><span class="p">,</span><span class="mi">512</span><span class="p">)</span>
+    <span class="n">tmp</span> <span class="o">=</span> <span class="n">tmp</span> <span class="o">..</span> <span class="s2">&quot;1&quot;</span> <span class="o">..</span> <span class="nb">string.rep</span><span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">,</span><span class="n">nextI</span><span class="p">)</span>
+    <span class="kd">local</span> <span class="n">append</span> <span class="o">=</span> <span class="n">nToBin</span><span class="p">(</span><span class="o">#</span><span class="n">text</span><span class="p">)</span>
+    <span class="n">append</span> <span class="o">=</span> <span class="nb">string.rep</span><span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">,</span><span class="mi">64</span><span class="o">-#</span><span class="n">append</span><span class="p">)</span> <span class="o">..</span> <span class="n">append</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">tmp</span> <span class="o">..</span> <span class="n">append</span>
+    <span class="kd">local</span> <span class="n">nB</span> <span class="o">=</span> <span class="n">XinY</span><span class="p">(</span><span class="o">#</span><span class="n">text</span><span class="p">,</span><span class="mi">512</span><span class="p">)</span>
+    <span class="n">largeReset</span><span class="p">()</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">nB</span> <span class="kr">do</span>
+        <span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">String</span><span class="o">=</span><span class="n">text</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="o">*</span><span class="mi">512</span><span class="o">-</span><span class="mi">511</span><span class="p">,</span><span class="n">i</span><span class="o">*</span><span class="mi">512</span><span class="p">)</span>
+    <span class="kr">end</span>
+    <span class="c1">--Block preprocessing</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">nB</span> <span class="kr">do</span>
+        <span class="n">work</span> <span class="o">=</span> <span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">String</span>
+        <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">15</span> <span class="kr">do</span>
+            <span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">u</span><span class="p">]</span> <span class="o">=</span> <span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">String</span><span class="p">:</span><span class="n">sub</span><span class="p">((</span><span class="n">u</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="mi">32</span><span class="o">-</span><span class="mi">31</span><span class="p">,(</span><span class="n">u</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="mi">32</span><span class="p">)</span>
+        <span class="kr">end</span>
+        <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span><span class="mi">63</span> <span class="kr">do</span>
+            <span class="n">s0</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">u</span><span class="o">-</span><span class="mi">15</span><span class="p">],</span><span class="mi">7</span><span class="p">),</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">u</span><span class="o">-</span><span class="mi">15</span><span class="p">],</span><span class="mi">18</span><span class="p">))</span>
+            <span class="n">s0</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">s0</span><span class="p">,</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">u</span><span class="o">-</span><span class="mi">15</span><span class="p">],</span><span class="mi">3</span><span class="p">))</span>
+            <span class="n">s1</span> <span class="o">=</span>  <span class="n">XOR</span><span class="p">(</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">u</span><span class="o">-</span><span class="mi">2</span><span class="p">],</span><span class="mi">17</span><span class="p">),</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">u</span><span class="o">-</span><span class="mi">2</span><span class="p">],</span><span class="mi">19</span><span class="p">))</span>
+            <span class="n">s1</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">s1</span><span class="p">,</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">u</span><span class="o">-</span><span class="mi">2</span><span class="p">],</span><span class="mi">10</span><span class="p">))</span>
+            <span class="n">step1</span> <span class="o">=</span> <span class="n">moduloAdd</span><span class="p">(</span><span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">u</span><span class="o">-</span><span class="mi">16</span><span class="p">],</span><span class="n">s0</span><span class="p">)</span>
+            <span class="n">step1</span> <span class="o">=</span> <span class="n">moduloAdd</span><span class="p">(</span><span class="n">step1</span><span class="p">,</span><span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">u</span><span class="o">-</span><span class="mi">7</span><span class="p">])</span>
+            <span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">u</span><span class="p">]</span> <span class="o">=</span> <span class="n">moduloAdd</span><span class="p">(</span><span class="n">step1</span><span class="p">,</span><span class="n">s1</span><span class="p">)</span>
+        <span class="kr">end</span>
+    <span class="kr">end</span>
+    <span class="c1">--Getting to the actual hash now</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">nB</span> <span class="kr">do</span>
+        <span class="n">miniReset</span><span class="p">()</span>
+        <span class="kr">for</span> <span class="n">o</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">63</span> <span class="kr">do</span>
+            <span class="kd">local</span> <span class="n">s0</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="mi">2</span><span class="p">),</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="mi">13</span><span class="p">))</span>
+            <span class="n">s0</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">s0</span><span class="p">,</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="mi">22</span><span class="p">))</span>
+            <span class="kd">local</span> <span class="n">maj</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">AND</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="n">HVal</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span><span class="n">AND</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="n">HVal</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+            <span class="n">maj</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">maj</span><span class="p">,</span><span class="n">AND</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="n">HVal</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+            <span class="kd">local</span> <span class="n">t2</span> <span class="o">=</span> <span class="n">moduloAdd</span><span class="p">(</span><span class="n">s0</span><span class="p">,</span><span class="n">maj</span><span class="p">)</span>
+            <span class="kd">local</span> <span class="n">s1</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span><span class="mi">6</span><span class="p">),</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span><span class="mi">11</span><span class="p">))</span>
+            <span class="n">s1</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">s1</span><span class="p">,</span><span class="n">RightRotate</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span><span class="mi">25</span><span class="p">))</span>
+            <span class="kd">local</span> <span class="n">ch</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">AND</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span><span class="n">HVal</span><span class="p">[</span><span class="mi">5</span><span class="p">]),</span><span class="n">AND</span><span class="p">(</span><span class="n">NOT</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">4</span><span class="p">]),</span><span class="n">HVal</span><span class="p">[</span><span class="mi">6</span><span class="p">]))</span>
+            <span class="kd">local</span> <span class="n">t1</span> <span class="o">=</span> <span class="n">moduloAdd</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">7</span><span class="p">],</span><span class="n">s1</span><span class="p">)</span>
+            <span class="n">t1</span> <span class="o">=</span> <span class="n">moduloAdd</span><span class="p">(</span><span class="n">t1</span><span class="p">,</span><span class="n">ch</span><span class="p">)</span>
+            <span class="n">t1</span> <span class="o">=</span> <span class="n">moduloAdd</span><span class="p">(</span><span class="n">t1</span><span class="p">,</span><span class="n">Constants</span><span class="p">[</span><span class="n">o</span><span class="p">])</span>
+            <span class="n">t1</span> <span class="o">=</span> <span class="n">moduloAdd</span><span class="p">(</span><span class="n">t1</span><span class="p">,</span><span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">o</span><span class="p">])</span>
+            <span class="n">HVal</span><span class="p">[</span><span class="mi">7</span><span class="p">]</span> <span class="o">=</span> <span class="n">HVal</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span>
+            <span class="n">HVal</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span> <span class="o">=</span> <span class="n">HVal</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span>
+            <span class="n">HVal</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span> <span class="o">=</span> <span class="n">HVal</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span>
+            <span class="n">HVal</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="n">moduloAdd</span><span class="p">(</span><span class="n">HVal</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span><span class="n">t1</span><span class="p">)</span>
+            <span class="n">HVal</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">HVal</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+            <span class="n">HVal</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">HVal</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">HVal</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">HVal</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">HVal</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">moduloAdd</span><span class="p">(</span><span class="n">t1</span><span class="p">,</span><span class="n">t2</span><span class="p">)</span>
+        <span class="kr">end</span>
+        <span class="kr">for</span> <span class="n">o</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">7</span> <span class="kr">do</span>
+            <span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">o</span><span class="p">]</span> <span class="o">=</span> <span class="n">moduloAdd</span><span class="p">(</span><span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="n">o</span><span class="p">],</span><span class="n">HVal</span><span class="p">[</span><span class="n">o</span><span class="p">])</span>
+        <span class="kr">end</span>
+    <span class="kr">end</span>
+    <span class="n">FINAL</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">7</span> <span class="kr">do</span>
+        <span class="n">FINAL</span> <span class="o">=</span> <span class="n">FINAL</span> <span class="o">..</span> <span class="n">bToHex</span><span class="p">(</span><span class="n">Blocks</span><span class="p">[</span><span class="n">nB</span><span class="p">][</span><span class="n">i</span><span class="p">])</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">FINAL</span>
+<span class="kr">end</span>
+
+<span class="n">HEX</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;0&quot;</span><span class="p">,</span><span class="s2">&quot;1&quot;</span><span class="p">,</span><span class="s2">&quot;2&quot;</span><span class="p">,</span><span class="s2">&quot;3&quot;</span><span class="p">,</span><span class="s2">&quot;4&quot;</span><span class="p">,</span><span class="s2">&quot;5&quot;</span><span class="p">,</span><span class="s2">&quot;6&quot;</span><span class="p">,</span><span class="s2">&quot;7&quot;</span><span class="p">,</span><span class="s2">&quot;8&quot;</span><span class="p">,</span><span class="s2">&quot;9&quot;</span><span class="p">,</span><span class="s2">&quot;A&quot;</span><span class="p">,</span><span class="s2">&quot;B&quot;</span><span class="p">,</span><span class="s2">&quot;C&quot;</span><span class="p">,</span><span class="s2">&quot;D&quot;</span><span class="p">,</span><span class="s2">&quot;E&quot;</span><span class="p">,</span><span class="s2">&quot;F&quot;</span><span class="p">,</span><span class="s2">&quot;0000&quot;</span><span class="p">,</span><span class="s2">&quot;0001&quot;</span><span class="p">,</span><span class="s2">&quot;0010&quot;</span><span class="p">,</span><span class="s2">&quot;0011&quot;</span><span class="p">,</span><span class="s2">&quot;0100&quot;</span><span class="p">,</span><span class="s2">&quot;0101&quot;</span><span class="p">,</span><span class="s2">&quot;0110&quot;</span><span class="p">,</span><span class="s2">&quot;0111&quot;</span><span class="p">,</span><span class="s2">&quot;1000&quot;</span><span class="p">,</span><span class="s2">&quot;1001&quot;</span><span class="p">,</span><span class="s2">&quot;1010&quot;</span><span class="p">,</span><span class="s2">&quot;1011&quot;</span><span class="p">,</span><span class="s2">&quot;1100&quot;</span><span class="p">,</span><span class="s2">&quot;1101&quot;</span><span class="p">,</span><span class="s2">&quot;1110&quot;</span><span class="p">,</span><span class="s2">&quot;1111&quot;</span><span class="p">}</span>
+<span class="n">SHIFT</span> <span class="o">=</span> <span class="p">{</span><span class="mi">23</span><span class="p">,</span> <span class="mi">27</span><span class="p">,</span> <span class="mi">33</span><span class="p">,</span> <span class="mi">41</span><span class="p">,</span> <span class="mi">51</span><span class="p">,</span> <span class="mi">63</span><span class="p">,</span> <span class="mi">77</span><span class="p">,</span> <span class="mi">93</span><span class="p">,</span> <span class="mi">111</span><span class="p">,</span> <span class="mi">131</span><span class="p">,</span> <span class="mi">153</span><span class="p">,</span> <span class="mi">177</span><span class="p">,</span> <span class="mi">203</span><span class="p">,</span> <span class="mi">231</span><span class="p">,</span> <span class="mi">261</span><span class="p">,</span> <span class="mi">293</span><span class="p">,</span> <span class="mi">327</span><span class="p">,</span> <span class="mi">363</span><span class="p">,</span> <span class="mi">401</span><span class="p">,</span> <span class="mi">441</span><span class="p">,</span> <span class="mi">483</span><span class="p">,</span> <span class="mi">527</span><span class="p">,</span> <span class="mi">573</span><span class="p">,</span> <span class="mi">621</span><span class="p">,</span> <span class="mi">671</span><span class="p">,</span> <span class="mi">723</span><span class="p">,</span> <span class="mi">777</span><span class="p">,</span> <span class="mi">833</span><span class="p">,</span> <span class="mi">891</span><span class="p">,</span> <span class="mi">951</span><span class="p">,</span> <span class="mi">1013</span><span class="p">,</span> <span class="mi">1077</span><span class="p">,</span> <span class="mi">1143</span><span class="p">,</span> <span class="mi">1211</span><span class="p">,</span> <span class="mi">1281</span><span class="p">,</span> <span class="mi">1353</span><span class="p">,</span> <span class="mi">1427</span><span class="p">,</span> <span class="mi">1503</span><span class="p">,</span> <span class="mi">1581</span><span class="p">,</span> <span class="mi">1661</span><span class="p">,</span> <span class="mi">1743</span><span class="p">,</span> <span class="mi">1827</span><span class="p">,</span> <span class="mi">1913</span><span class="p">,</span> <span class="mi">2001</span><span class="p">,</span> <span class="mi">2091</span><span class="p">,</span> <span class="mi">2183</span><span class="p">,</span> <span class="mi">2277</span><span class="p">,</span> <span class="mi">2373</span><span class="p">,</span> <span class="mi">2471</span><span class="p">,</span> <span class="mi">2571</span><span class="p">,</span> <span class="mi">2673</span><span class="p">,</span> <span class="mi">2777</span><span class="p">,</span> <span class="mi">2883</span><span class="p">,</span> <span class="mi">2991</span><span class="p">,</span> <span class="mi">3101</span><span class="p">,</span> <span class="mi">3213</span><span class="p">,</span> <span class="mi">3327</span><span class="p">,</span> <span class="mi">3443</span><span class="p">,</span> <span class="mi">3561</span><span class="p">,</span> <span class="mi">3681</span><span class="p">,</span> <span class="mi">3803</span><span class="p">,</span> <span class="mi">3927</span><span class="p">,</span> <span class="mi">4053</span><span class="p">,</span> <span class="mi">4181</span><span class="p">,</span> <span class="mi">4311</span><span class="p">,</span> <span class="mi">4443</span><span class="p">,</span> <span class="mi">4577</span><span class="p">,</span> <span class="mi">4713</span><span class="p">,</span> <span class="mi">4851</span><span class="p">,</span> <span class="mi">4991</span><span class="p">,</span> <span class="mi">5133</span><span class="p">,</span> <span class="mi">5277</span><span class="p">,</span> <span class="mi">5423</span><span class="p">,</span> <span class="mi">5571</span><span class="p">,</span> <span class="mi">5721</span><span class="p">,</span> <span class="mi">5873</span><span class="p">,</span> <span class="mi">6027</span><span class="p">,</span> <span class="mi">6183</span><span class="p">,</span> <span class="mi">6341</span><span class="p">,</span> <span class="mi">6501</span><span class="p">,</span> <span class="mi">6663</span><span class="p">,</span> <span class="mi">6827</span><span class="p">,</span> <span class="mi">6993</span><span class="p">,</span> <span class="mi">7161</span><span class="p">,</span> <span class="mi">7331</span><span class="p">,</span> <span class="mi">7503</span><span class="p">,</span> <span class="mi">7677</span><span class="p">,</span> <span class="mi">7853</span><span class="p">,</span> <span class="mi">8031</span><span class="p">,</span> <span class="mi">8211</span><span class="p">,</span> <span class="mi">8393</span><span class="p">,</span> <span class="mi">8577</span><span class="p">,</span> <span class="mi">8763</span><span class="p">,</span> <span class="mi">8951</span><span class="p">,</span> <span class="mi">9141</span><span class="p">,</span> <span class="mi">9333</span><span class="p">,</span> <span class="mi">9527</span><span class="p">,</span> <span class="mi">9723</span><span class="p">,</span> <span class="mi">9921</span><span class="p">,</span> <span class="mi">10121</span><span class="p">,</span> <span class="mi">10323</span><span class="p">,</span> <span class="mi">10527</span><span class="p">,</span> <span class="mi">10733</span><span class="p">,</span> <span class="mi">10941</span><span class="p">,</span> <span class="mi">11151</span><span class="p">,</span> <span class="mi">11363</span><span class="p">,</span> <span class="mi">11577</span><span class="p">,</span> <span class="mi">11793</span><span class="p">,</span> <span class="mi">12011</span><span class="p">,</span> <span class="mi">12231</span><span class="p">,</span> <span class="mi">12453</span><span class="p">,</span> <span class="mi">12677</span><span class="p">,</span> <span class="mi">12903</span><span class="p">,</span> <span class="mi">13131</span><span class="p">,</span> <span class="mi">13361</span><span class="p">,</span> <span class="mi">13593</span><span class="p">,</span> <span class="mi">13827</span><span class="p">,</span> <span class="mi">14063</span><span class="p">,</span> <span class="mi">14301</span><span class="p">,</span> <span class="mi">14541</span><span class="p">,</span> <span class="mi">14783</span><span class="p">,</span> <span class="mi">15027</span><span class="p">,</span> <span class="mi">15273</span><span class="p">,</span> <span class="mi">15521</span><span class="p">,</span> <span class="mi">15771</span><span class="p">,</span> <span class="mi">16023</span><span class="p">,</span> <span class="mi">16277</span><span class="p">,</span> <span class="mi">16533</span><span class="p">,</span> <span class="mi">16791</span><span class="p">,</span> <span class="mi">17051</span><span class="p">,</span> <span class="mi">17313</span><span class="p">,</span> <span class="mi">17577</span><span class="p">,</span> <span class="mi">17843</span><span class="p">,</span> <span class="mi">18111</span><span class="p">,</span> <span class="mi">18381</span><span class="p">,</span> <span class="mi">18653</span><span class="p">,</span> <span class="mi">18927</span><span class="p">,</span> <span class="mi">19203</span><span class="p">,</span> <span class="mi">19481</span><span class="p">,</span> <span class="mi">19761</span><span class="p">,</span> <span class="mi">20043</span><span class="p">,</span> <span class="mi">20327</span><span class="p">,</span> <span class="mi">20613</span><span class="p">,</span> <span class="mi">20901</span><span class="p">,</span> <span class="mi">21191</span><span class="p">,</span> <span class="mi">21483</span><span class="p">,</span> <span class="mi">21777</span><span class="p">,</span> <span class="mi">22073</span><span class="p">,</span> <span class="mi">22371</span><span class="p">,</span> <span class="mi">22671</span><span class="p">,</span> <span class="mi">22973</span><span class="p">,</span> <span class="mi">23277</span><span class="p">,</span> <span class="mi">23583</span><span class="p">,</span> <span class="mi">23891</span><span class="p">,</span> <span class="mi">24201</span><span class="p">,</span> <span class="mi">24513</span><span class="p">,</span> <span class="mi">24827</span><span class="p">,</span> <span class="mi">25143</span><span class="p">,</span> <span class="mi">25461</span><span class="p">,</span> <span class="mi">25781</span><span class="p">,</span> <span class="mi">26103</span><span class="p">,</span> <span class="mi">26427</span><span class="p">,</span> <span class="mi">26753</span><span class="p">,</span> <span class="mi">27081</span><span class="p">,</span> <span class="mi">27411</span><span class="p">,</span> <span class="mi">27743</span><span class="p">,</span> <span class="mi">28077</span><span class="p">,</span> <span class="mi">28413</span><span class="p">,</span> <span class="mi">28751</span><span class="p">,</span> <span class="mi">29091</span><span class="p">,</span> <span class="mi">29433</span><span class="p">,</span> <span class="mi">29777</span><span class="p">,</span> <span class="mi">30123</span><span class="p">,</span> <span class="mi">30471</span><span class="p">,</span> <span class="mi">30821</span><span class="p">,</span> <span class="mi">31173</span><span class="p">,</span> <span class="mi">31527</span><span class="p">,</span> <span class="mi">31883</span><span class="p">,</span> <span class="mi">32241</span><span class="p">,</span> <span class="mi">32601</span><span class="p">,</span> <span class="mi">32963</span><span class="p">,</span> <span class="mi">33327</span><span class="p">,</span> <span class="mi">33693</span><span class="p">,</span> <span class="mi">34061</span><span class="p">,</span> <span class="mi">34431</span><span class="p">,</span> <span class="mi">34803</span><span class="p">,</span> <span class="mi">35177</span><span class="p">,</span> <span class="mi">35553</span><span class="p">,</span> <span class="mi">35931</span><span class="p">,</span> <span class="mi">36311</span><span class="p">,</span> <span class="mi">36693</span><span class="p">,</span> <span class="mi">37077</span><span class="p">,</span> <span class="mi">37463</span><span class="p">,</span> <span class="mi">37851</span><span class="p">,</span> <span class="mi">38241</span><span class="p">,</span> <span class="mi">38633</span><span class="p">,</span> <span class="mi">39027</span><span class="p">,</span> <span class="mi">39423</span><span class="p">,</span> <span class="mi">39821</span><span class="p">,</span> <span class="mi">40221</span><span class="p">,</span> <span class="mi">40623</span><span class="p">,</span> <span class="mi">41027</span><span class="p">,</span> <span class="mi">41433</span><span class="p">,</span> <span class="mi">41841</span><span class="p">,</span> <span class="mi">42251</span><span class="p">,</span> <span class="mi">42663</span><span class="p">,</span> <span class="mi">43077</span><span class="p">,</span> <span class="mi">43493</span><span class="p">,</span> <span class="mi">43911</span><span class="p">,</span> <span class="mi">44331</span><span class="p">,</span> <span class="mi">44753</span><span class="p">,</span> <span class="mi">45177</span><span class="p">,</span> <span class="mi">45603</span><span class="p">,</span> <span class="mi">46031</span><span class="p">,</span> <span class="mi">46461</span><span class="p">,</span> <span class="mi">46893</span><span class="p">,</span> <span class="mi">47327</span><span class="p">,</span> <span class="mi">47763</span><span class="p">,</span> <span class="mi">48201</span><span class="p">,</span> <span class="mi">48641</span><span class="p">,</span> <span class="mi">49083</span><span class="p">,</span> <span class="mi">49527</span><span class="p">,</span> <span class="mi">49973</span><span class="p">,</span> <span class="mi">50421</span><span class="p">,</span> <span class="mi">50871</span><span class="p">,</span> <span class="mi">51323</span><span class="p">,</span> <span class="mi">51777</span><span class="p">,</span> <span class="mi">52233</span><span class="p">,</span> <span class="mi">52691</span><span class="p">,</span> <span class="mi">53151</span><span class="p">,</span> <span class="mi">53613</span><span class="p">,</span> <span class="mi">54077</span><span class="p">,</span> <span class="mi">54543</span><span class="p">,</span> <span class="mi">55011</span><span class="p">,</span> <span class="mi">55481</span><span class="p">,</span> <span class="mi">55953</span><span class="p">,</span> <span class="mi">56427</span><span class="p">,</span> <span class="mi">56903</span><span class="p">,</span> <span class="mi">57381</span><span class="p">,</span> <span class="mi">57861</span><span class="p">,</span> <span class="mi">58343</span><span class="p">,</span> <span class="mi">58827</span><span class="p">,</span> <span class="mi">59313</span><span class="p">,</span> <span class="mi">59801</span><span class="p">,</span> <span class="mi">60291</span><span class="p">,</span> <span class="mi">60783</span><span class="p">,</span> <span class="mi">61277</span><span class="p">,</span> <span class="mi">61773</span><span class="p">,</span> <span class="mi">62271</span><span class="p">,</span> <span class="mi">62771</span><span class="p">,</span> <span class="mi">63273</span><span class="p">,</span> <span class="mi">63777</span><span class="p">,</span> <span class="mi">64283</span><span class="p">,</span> <span class="mi">64791</span><span class="p">,</span> <span class="mi">65301</span><span class="p">,</span> <span class="mi">65813</span><span class="p">}</span>
+<span class="kr">function</span> <span class="nf">genSBox</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="kd">local</span> <span class="n">Key</span> <span class="o">=</span> <span class="n">seed</span>
+    <span class="kd">local</span> <span class="n">SBox</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="mi">16</span> <span class="kr">do</span>
+        <span class="n">work</span> <span class="o">=</span> <span class="n">seed</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="o">*</span><span class="mi">16</span><span class="o">-</span><span class="mi">15</span><span class="p">,</span><span class="n">i</span><span class="o">*</span><span class="mi">16</span><span class="p">)</span>
+        <span class="n">fin</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">work</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">8</span><span class="p">),</span><span class="n">work</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span><span class="mi">16</span><span class="p">))</span>
+    <span class="kr">end</span>
+    <span class="kd">local</span> <span class="n">nx</span><span class="p">,</span><span class="n">ny</span> <span class="o">=</span> <span class="n">bToDec</span><span class="p">(</span><span class="n">fin</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span><span class="mi">8</span><span class="p">)),</span><span class="n">bToDec</span><span class="p">(</span><span class="n">fin</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span><span class="p">))</span>
+    <span class="n">of</span> <span class="o">=</span> <span class="n">SHIFT</span><span class="p">[</span><span class="n">bToDec</span><span class="p">(</span><span class="n">fin</span><span class="p">)</span><span class="o">%</span><span class="mi">256</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span>
+    <span class="kd">local</span> <span class="n">tmp</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="kd">local</span> <span class="n">IBox</span><span class="o">=</span>  <span class="p">{}</span>
+    <span class="kr">for</span> <span class="n">y</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">15</span> <span class="kr">do</span>
+        <span class="n">tmp</span><span class="p">[</span><span class="n">y</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">SBox</span><span class="p">[</span><span class="n">y</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="kr">for</span> <span class="n">x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">15</span> <span class="kr">do</span>
+            <span class="n">SBox</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="n">x</span><span class="p">]</span> <span class="o">=</span>  <span class="n">nToBin</span><span class="p">((</span><span class="n">y</span><span class="o">*</span><span class="n">of</span><span class="o">+</span><span class="n">ny</span><span class="p">)</span><span class="o">%</span><span class="mi">16</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span><span class="o">..</span><span class="n">nToBin</span><span class="p">((</span><span class="n">x</span><span class="o">*</span><span class="n">of</span><span class="o">+</span><span class="n">nx</span><span class="p">)</span><span class="o">%</span><span class="mi">16</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span>
+            <span class="n">tmp</span><span class="p">[</span><span class="n">y</span><span class="p">][</span><span class="n">x</span><span class="p">]</span> <span class="o">=</span>  <span class="n">nToBin</span><span class="p">((</span><span class="n">y</span><span class="o">*</span><span class="n">of</span><span class="o">+</span><span class="n">ny</span><span class="p">)</span><span class="o">%</span><span class="mi">16</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span><span class="o">..</span><span class="n">nToBin</span><span class="p">((</span><span class="n">x</span><span class="o">*</span><span class="n">of</span><span class="o">+</span><span class="n">nx</span><span class="p">)</span><span class="o">%</span><span class="mi">16</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span>
+        <span class="kr">end</span>
+    <span class="kr">end</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">15</span> <span class="kr">do</span>
+        <span class="kr">for</span> <span class="n">x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">15</span> <span class="kr">do</span>
+            <span class="n">tmp</span><span class="p">[</span><span class="n">x</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">SBox</span><span class="p">[(</span><span class="n">x</span><span class="o">*</span><span class="p">(</span><span class="n">of</span><span class="o">*</span><span class="mi">2</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="o">+</span><span class="n">i</span><span class="p">)</span><span class="o">%</span><span class="mi">16</span><span class="p">][</span><span class="n">i</span><span class="p">]</span>
+        <span class="kr">end</span>
+    <span class="kr">end</span>
+    <span class="kd">local</span> <span class="n">SBox</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="kd">local</span> <span class="n">IBox</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">15</span> <span class="kr">do</span>
+        <span class="n">SBox</span><span class="p">[</span><span class="n">HEX</span><span class="p">[</span><span class="mi">17</span><span class="o">+</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="kr">for</span> <span class="n">x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="mi">15</span> <span class="kr">do</span>
+            <span class="n">p1</span><span class="p">,</span><span class="n">p2</span><span class="p">,</span><span class="n">p3</span> <span class="o">=</span> <span class="n">HEX</span><span class="p">[</span><span class="mi">17</span><span class="o">+</span><span class="n">i</span><span class="p">],</span><span class="n">HEX</span><span class="p">[</span><span class="mi">17</span><span class="o">+</span><span class="n">x</span><span class="p">],</span><span class="n">tmp</span><span class="p">[</span><span class="n">i</span><span class="p">][(</span><span class="n">x</span><span class="o">*</span><span class="n">of</span><span class="o">+</span><span class="mi">1</span><span class="o">+</span><span class="n">i</span><span class="p">)</span><span class="o">%</span><span class="mi">16</span><span class="p">]</span>
+            <span class="n">SBox</span><span class="p">[</span><span class="n">p1</span><span class="p">][</span><span class="n">p2</span><span class="p">]</span> <span class="o">=</span> <span class="n">p3</span>
+            <span class="kr">if</span> <span class="n">IBox</span><span class="p">[</span><span class="n">p3</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span><span class="p">)]</span> <span class="o">==</span> <span class="kc">nil</span> <span class="kr">then</span>
+                <span class="n">IBox</span><span class="p">[</span><span class="n">p3</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span><span class="p">)]</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="kr">end</span>
+            <span class="n">IBox</span><span class="p">[</span><span class="n">p3</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span><span class="p">)][</span><span class="n">p3</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span><span class="mi">8</span><span class="p">)]</span> <span class="o">=</span> <span class="n">p1</span> <span class="o">..</span> <span class="n">p2</span>
+        <span class="kr">end</span>
+    <span class="kr">end</span>
+    <span class="n">tmp</span> <span class="o">=</span> <span class="kc">nil</span>
+    <span class="kr">return</span> <span class="n">SBox</span><span class="p">,</span><span class="n">IBox</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nf">SubByte</span><span class="p">(</span><span class="n">txt</span><span class="p">,</span><span class="n">tab</span><span class="p">)</span>
+    <span class="n">final</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="o">#</span><span class="n">txt</span><span class="o">/</span><span class="mi">8</span> <span class="kr">do</span>
+        <span class="n">p1</span><span class="p">,</span><span class="n">p2</span> <span class="o">=</span> <span class="n">txt</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="o">*</span><span class="mi">8</span><span class="o">-</span><span class="mi">7</span><span class="p">,</span><span class="n">i</span><span class="o">*</span><span class="mi">8</span><span class="o">-</span><span class="mi">4</span><span class="p">),</span><span class="n">txt</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">i</span><span class="o">*</span><span class="mi">8</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span><span class="n">i</span><span class="o">*</span><span class="mi">8</span><span class="p">)</span>
+        <span class="n">final</span> <span class="o">=</span> <span class="n">final</span> <span class="o">..</span> <span class="n">tab</span><span class="p">[</span><span class="n">p1</span><span class="p">][</span><span class="n">p2</span><span class="p">]</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">final</span>
+<span class="kr">end</span>
+
+
+<span class="kr">function</span> <span class="nc">ARCS</span><span class="p">.</span><span class="nf">CipherEN</span><span class="p">(</span><span class="n">txt</span><span class="p">,</span><span class="n">key</span><span class="p">,</span><span class="n">rounds</span><span class="p">)</span>
+    <span class="n">Key</span> <span class="o">=</span> <span class="n">hToBin</span><span class="p">(</span><span class="n">ARCS</span><span class="p">.</span><span class="n">Hash</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>    <span class="c1">-- Creates a stronger key</span>
+    <span class="kr">if</span> <span class="ow">not</span> <span class="n">rounds</span> <span class="ow">or</span> <span class="n">rounds</span> <span class="o">&lt;</span> <span class="mi">16</span> <span class="kr">then</span>   <span class="c1">--makes sure you use proper round values</span>
+        <span class="n">rounds</span> <span class="o">=</span> <span class="mi">16</span>
+    <span class="kr">end</span>
+    <span class="kr">if</span> <span class="n">rounds</span> <span class="o">&gt;</span> <span class="mi">9999</span> <span class="kr">then</span>
+        <span class="n">rounds</span> <span class="o">=</span> <span class="n">rounds</span> <span class="o">%</span> <span class="mi">9999</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="kr">end</span>
+    <span class="n">IV</span> <span class="o">=</span> <span class="nb">os.date</span><span class="p">()</span>  <span class="c1">-- Sets up the initial CBC (cipher block chaining) vector</span>
+    <span class="n">IV</span> <span class="o">=</span> <span class="nb">string.gsub</span><span class="p">(</span><span class="nb">string.gsub</span><span class="p">(</span><span class="n">IV</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">8</span><span class="p">)</span> <span class="o">..</span> <span class="n">IV</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="mi">17</span><span class="p">),</span><span class="s2">&quot;/&quot;</span><span class="p">,</span><span class="s2">&quot;&quot;</span><span class="p">),</span><span class="s2">&quot;:&quot;</span><span class="p">,</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">IV</span> <span class="o">=</span> <span class="n">IV</span> <span class="o">..</span> <span class="nb">string.rep</span><span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">,</span><span class="mi">16</span><span class="o">-</span><span class="p">(</span><span class="o">#</span><span class="n">IV</span><span class="o">+#</span><span class="nb">tostring</span><span class="p">(</span><span class="n">rounds</span><span class="p">)))</span> <span class="o">..</span> <span class="n">rounds</span>
+    <span class="n">ttxt</span> <span class="o">=</span> <span class="n">txt</span> <span class="o">..</span> <span class="nb">string.char</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">..</span><span class="nb">string.rep</span><span class="p">(</span><span class="nb">string.char</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span><span class="n">nextInt</span><span class="p">(</span><span class="o">#</span><span class="n">txt</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="mi">16</span><span class="p">))</span>
+    <span class="n">PTxt</span> <span class="o">=</span> <span class="n">cToBin</span><span class="p">(</span><span class="n">IV</span> <span class="o">..</span> <span class="n">ttxt</span><span class="p">)</span>    <span class="c1">-- translates everything into binary for INCREASED speed</span>
+    <span class="n">PTxt</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">PTxt</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">128</span><span class="p">),</span><span class="n">Key</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">128</span><span class="p">))</span> <span class="o">..</span> <span class="n">PTxt</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">129</span><span class="p">,</span><span class="o">#</span><span class="n">PTxt</span><span class="p">)</span>
+    <span class="n">nB</span> <span class="o">=</span> <span class="n">XinY</span><span class="p">(</span><span class="o">#</span><span class="n">PTxt</span><span class="p">,</span><span class="mi">128</span><span class="p">)</span>
+    <span class="kd">local</span> <span class="n">Blocks</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">Blocks</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">PTxt</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">128</span><span class="p">)</span>
+    <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">nB</span> <span class="kr">do</span>    <span class="c1">-- breaks message into 128 bit (16 character) blocks</span>
+        <span class="n">Blocks</span><span class="p">[</span><span class="n">u</span><span class="p">]</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">PTxt</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">),</span><span class="n">Blocks</span><span class="p">[</span><span class="n">u</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="kr">end</span>
+    <span class="n">TEXT</span> <span class="o">=</span> <span class="n">hToBin</span><span class="p">(</span><span class="n">ARCS</span><span class="p">.</span><span class="n">Hash</span><span class="p">(</span><span class="n">bToChar</span><span class="p">(</span><span class="n">Key</span><span class="p">)))</span>
+    <span class="n">SBox</span> <span class="o">=</span> <span class="n">genSBox</span><span class="p">(</span><span class="n">Key</span><span class="p">)</span>     <span class="c1">-- generating the key dependant S-Box</span>
+    <span class="n">KBox</span> <span class="o">=</span> <span class="n">genSBox</span><span class="p">(</span><span class="n">TEXT</span><span class="p">)</span>    <span class="c1">-- generating the secondary key dependant S-Box (used for key expansion)</span>
+    <span class="n">KEYS</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">KEYS</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">Key</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">rounds</span><span class="o">+</span><span class="mi">1</span> <span class="kr">do</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">XOR</span><span class="p">(</span><span class="n">SubByte</span><span class="p">(</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">SBox</span><span class="p">),</span><span class="n">SubByte</span><span class="p">(</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">KBox</span><span class="p">)))</span>   <span class="c1">-- Turns 1, 256bit key into the required number of 256 bit keys</span>
+        <span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">tmp</span><span class="p">,(</span><span class="n">i</span><span class="o">%</span><span class="mi">64</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+    <span class="kr">end</span>
+    <span class="n">TMP</span> <span class="o">=</span> <span class="n">Blocks</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span> <span class="kr">do</span>
+    <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+    <span class="kr">end</span>
+    <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span> <span class="kr">do</span>            <span class="c1">-- encrypts the header with 16 rounds, always, ALWAYS</span>
+        <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">16</span> <span class="kr">do</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">SubByte</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">SBox</span><span class="p">)</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">shiftRow</span><span class="p">(</span><span class="n">TMP</span><span class="p">)</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+        <span class="kr">end</span>
+    <span class="kr">end</span>
+    <span class="n">TMP</span> <span class="o">=</span> <span class="n">SubByte</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">SBox</span><span class="p">)</span>
+    <span class="n">TMP</span> <span class="o">=</span> <span class="n">shiftRow</span><span class="p">(</span><span class="n">TMP</span><span class="p">)</span>
+    <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span> <span class="kr">do</span>
+    <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="mi">17</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+    <span class="kr">end</span>
+    <span class="n">Blocks</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">TMP</span>
+    <span class="kr">for</span> <span class="n">Z</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">nB</span> <span class="kr">do</span>
+        <span class="n">TMP</span> <span class="o">=</span> <span class="n">Blocks</span><span class="p">[</span><span class="n">Z</span><span class="p">]</span>
+        <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span> <span class="kr">do</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+        <span class="kr">end</span>
+        <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span> <span class="kr">do</span>
+            <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">rounds</span> <span class="kr">do</span>
+                <span class="n">TMP</span> <span class="o">=</span> <span class="n">SubByte</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">SBox</span><span class="p">)</span>
+                <span class="n">TMP</span> <span class="o">=</span> <span class="n">shiftRow</span><span class="p">(</span><span class="n">TMP</span><span class="p">)</span>
+                <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+                <span class="n">TMP</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">i</span><span class="o">%</span><span class="mi">64</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+            <span class="kr">end</span>
+        <span class="kr">end</span>
+        <span class="n">TMP</span> <span class="o">=</span> <span class="n">SubByte</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">SBox</span><span class="p">)</span>
+        <span class="n">TMP</span> <span class="o">=</span> <span class="n">shiftRow</span><span class="p">(</span><span class="n">TMP</span><span class="p">)</span>
+        <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span> <span class="kr">do</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="n">rounds</span><span class="o">+</span><span class="mi">1</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+        <span class="kr">end</span>
+        <span class="n">TMP</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">TMP</span><span class="p">,(</span><span class="n">rounds</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">%</span><span class="mi">64</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">Blocks</span><span class="p">[</span><span class="n">Z</span><span class="p">]</span> <span class="o">=</span> <span class="n">TMP</span>
+    <span class="kr">end</span>
+    <span class="n">FINAL</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">nB</span> <span class="kr">do</span>
+        <span class="n">FINAL</span> <span class="o">=</span> <span class="n">FINAL</span> <span class="o">..</span> <span class="n">bToHex</span><span class="p">(</span><span class="n">Blocks</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+    <span class="kr">end</span>
+    <span class="kr">return</span> <span class="n">FINAL</span>
+<span class="kr">end</span>
+
+<span class="kr">function</span> <span class="nc">ARCS</span><span class="p">.</span><span class="nf">CipherDE</span><span class="p">(</span><span class="n">txt</span><span class="p">,</span><span class="n">key</span><span class="p">,</span><span class="n">rounds</span><span class="p">)</span>
+    <span class="kr">if</span> <span class="ow">not</span> <span class="n">rounds</span> <span class="ow">or</span> <span class="n">rounds</span> <span class="o">&lt;</span> <span class="mi">16</span> <span class="kr">then</span>
+        <span class="n">rounds</span> <span class="o">=</span> <span class="mi">16</span>
+    <span class="kr">end</span>
+    <span class="kr">if</span> <span class="n">rounds</span> <span class="o">&gt;</span> <span class="mi">9999</span> <span class="kr">then</span>
+        <span class="n">rounds</span> <span class="o">=</span> <span class="n">rounds</span> <span class="o">%</span> <span class="mi">9999</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="kr">end</span>
+    <span class="n">Key</span> <span class="o">=</span> <span class="n">hToBin</span><span class="p">(</span><span class="n">ARCS</span><span class="p">.</span><span class="n">Hash</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
+    <span class="n">PTxt</span> <span class="o">=</span> <span class="n">hToBin</span><span class="p">(</span><span class="n">txt</span><span class="p">)</span>
+    <span class="n">nB</span> <span class="o">=</span> <span class="n">XinY</span><span class="p">(</span><span class="o">#</span><span class="n">PTxt</span><span class="p">,</span><span class="mi">128</span><span class="p">)</span>
+    <span class="kd">local</span> <span class="n">Blocks</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">nB</span> <span class="kr">do</span>    <span class="c1">-- breaks message into 128 bit (16 character) blocks</span>
+        <span class="n">Blocks</span><span class="p">[</span><span class="n">u</span><span class="p">]</span> <span class="o">=</span> <span class="n">PTxt</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">)</span>
+    <span class="kr">end</span>
+    <span class="n">TEXT</span> <span class="o">=</span> <span class="n">hToBin</span><span class="p">(</span><span class="n">ARCS</span><span class="p">.</span><span class="n">Hash</span><span class="p">(</span><span class="n">bToChar</span><span class="p">(</span><span class="n">Key</span><span class="p">)))</span>
+    <span class="n">SBox</span><span class="p">,</span><span class="n">IBox</span> <span class="o">=</span> <span class="n">genSBox</span><span class="p">(</span><span class="n">Key</span><span class="p">)</span>    <span class="c1">-- generating the key dependant S-Box</span>
+    <span class="n">KBox</span> <span class="o">=</span> <span class="n">genSBox</span><span class="p">(</span><span class="n">TEXT</span><span class="p">)</span>    <span class="c1">-- generating the secondary key dependant S-Box (used for key expansion)</span>
+    <span class="n">KEYS</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">KEYS</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">Key</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">rounds</span><span class="o">+</span><span class="mi">1</span> <span class="kr">do</span>
+        <span class="n">tmp</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">XOR</span><span class="p">(</span><span class="n">SubByte</span><span class="p">(</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">SBox</span><span class="p">),</span><span class="n">SubByte</span><span class="p">(</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">KBox</span><span class="p">)))</span>   <span class="c1">-- Turns 1, 256bit key into 98 256 bit keys</span>
+        <span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">tmp</span><span class="p">,(</span><span class="n">i</span><span class="o">%</span><span class="mi">64</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+    <span class="kr">end</span>
+    <span class="n">TMP</span> <span class="o">=</span> <span class="n">Blocks</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span> <span class="kr">do</span>
+    <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="mi">17</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+    <span class="kr">end</span>
+    <span class="n">TMP</span> <span class="o">=</span> <span class="n">shiftRow</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="kc">true</span><span class="p">)</span>
+    <span class="n">TMP</span> <span class="o">=</span> <span class="n">SubByte</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">IBox</span><span class="p">)</span>
+    <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span> <span class="kr">do</span>             <span class="c1">-- encrypts the header with 16 rounds, always, ALWAYS</span>
+        <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span> <span class="kr">do</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">shiftRow</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="kc">true</span><span class="p">)</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">SubByte</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">IBox</span><span class="p">)</span>
+        <span class="kr">end</span>
+    <span class="kr">end</span>
+    <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span> <span class="kr">do</span>
+    <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+    <span class="kr">end</span>
+    <span class="n">FINAL</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span><span class="n">nB</span> <span class="kr">do</span>
+        <span class="n">FINAL</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="kr">end</span>
+    <span class="n">FINAL</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">TMP</span>
+    <span class="n">HEADER</span> <span class="o">=</span> <span class="n">bToChar</span><span class="p">(</span><span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">Key</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">128</span><span class="p">)))</span>
+    <span class="n">nRnds</span> <span class="o">=</span> <span class="nb">tonumber</span><span class="p">(</span><span class="n">HEADER</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="o">#</span><span class="n">HEADER</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span><span class="o">#</span><span class="n">HEADER</span><span class="p">))</span>
+    <span class="kr">if</span> <span class="n">nRnds</span> <span class="kr">then</span>
+        <span class="kr">if</span> <span class="n">nRnds</span> <span class="o">&gt;</span> <span class="n">rounds</span> <span class="kr">then</span>
+            <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="n">rounds</span><span class="p">,</span><span class="n">nRnds</span><span class="o">+</span><span class="mi">1</span> <span class="kr">do</span>
+                <span class="n">tmp</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">XOR</span><span class="p">(</span><span class="n">SubByte</span><span class="p">(</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">SBox</span><span class="p">),</span><span class="n">SubByte</span><span class="p">(</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span><span class="n">KBox</span><span class="p">)))</span>   <span class="c1">-- Turns 1, 256bit key into 98 256 bit keys</span>
+                <span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">tmp</span><span class="p">,(</span><span class="n">i</span><span class="o">%</span><span class="mi">64</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+            <span class="kr">end</span>
+        <span class="kr">end</span>
+        <span class="n">rounds</span> <span class="o">=</span> <span class="n">nRnds</span>
+        <span class="kr">for</span> <span class="n">Z</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">nB</span> <span class="kr">do</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">Blocks</span><span class="p">[</span><span class="n">Z</span><span class="p">]</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="mi">128</span><span class="o">-</span><span class="p">((</span><span class="n">rounds</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">%</span><span class="mi">64</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span>
+            <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span> <span class="kr">do</span>
+                <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="n">rounds</span><span class="o">+</span><span class="mi">1</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+            <span class="kr">end</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">shiftRow</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="kc">true</span><span class="p">)</span>
+            <span class="n">TMP</span> <span class="o">=</span> <span class="n">SubByte</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">IBox</span><span class="p">)</span>
+            <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span> <span class="kr">do</span>
+                <span class="kr">for</span> <span class="n">i</span><span class="o">=</span><span class="n">rounds</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span> <span class="kr">do</span>
+                    <span class="n">TMP</span> <span class="o">=</span> <span class="n">RightRotate</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="mi">128</span><span class="o">-</span><span class="p">(</span><span class="n">i</span><span class="o">%</span><span class="mi">64</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span>
+                    <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+                    <span class="n">TMP</span> <span class="o">=</span> <span class="n">shiftRow</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="kc">true</span><span class="p">)</span>
+                    <span class="n">TMP</span> <span class="o">=</span> <span class="n">SubByte</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">IBox</span><span class="p">)</span>
+                <span class="kr">end</span>
+            <span class="kr">end</span>
+            <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span> <span class="kr">do</span>
+                <span class="n">TMP</span> <span class="o">=</span> <span class="n">XOR</span><span class="p">(</span><span class="n">TMP</span><span class="p">,</span><span class="n">KEYS</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">sub</span><span class="p">(</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="o">-</span><span class="mi">127</span><span class="p">,</span><span class="n">u</span><span class="o">*</span><span class="mi">128</span><span class="p">))</span>
+            <span class="kr">end</span>
+            <span class="n">FINAL</span><span class="p">[</span><span class="n">Z</span><span class="p">]</span> <span class="o">=</span> <span class="n">TMP</span>
+        <span class="kr">end</span>
+        <span class="n">FINALans</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="kr">for</span> <span class="n">u</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">nB</span> <span class="kr">do</span>    <span class="c1">-- breaks message into 128 bit (16 character) blocks</span>
+            <span class="n">work</span> <span class="o">=</span> <span class="n">bToChar</span><span class="p">(</span><span class="n">XOR</span><span class="p">(</span><span class="n">FINAL</span><span class="p">[</span><span class="n">u</span><span class="p">],</span><span class="n">FINAL</span><span class="p">[</span><span class="n">u</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+            <span class="n">found</span> <span class="o">=</span> <span class="n">work</span><span class="p">:</span><span class="n">find</span><span class="p">(</span><span class="nb">string.char</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+            <span class="kr">if</span> <span class="n">found</span> <span class="kr">then</span>
+                <span class="n">work</span> <span class="o">=</span> <span class="n">work</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">found</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="kr">end</span>
+            <span class="n">FINALans</span> <span class="o">=</span> <span class="n">FINALans</span> <span class="o">..</span> <span class="n">work</span>
+        <span class="kr">end</span>
+        <span class="n">HEADER</span> <span class="o">=</span> <span class="n">HEADER</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span> <span class="o">..</span> <span class="s2">&quot;/&quot;</span> <span class="o">..</span> <span class="n">HEADER</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span> <span class="o">..</span> <span class="s2">&quot;/&quot;</span> <span class="o">..</span> <span class="n">HEADER</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span><span class="mi">6</span><span class="p">)</span> <span class="o">..</span> <span class="s2">&quot; &quot;</span><span class="o">..</span> <span class="n">HEADER</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span><span class="mi">8</span><span class="p">)</span> <span class="o">..</span> <span class="s2">&quot;:&quot;</span> <span class="o">..</span> <span class="n">HEADER</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span><span class="mi">10</span><span class="p">)</span> <span class="o">..</span> <span class="s2">&quot;:&quot;</span> <span class="o">..</span> <span class="n">HEADER</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">11</span><span class="p">,</span><span class="mi">12</span><span class="p">)</span> <span class="o">..</span> <span class="s2">&quot; &quot;</span> <span class="o">..</span> <span class="n">HEADER</span><span class="p">:</span><span class="n">sub</span><span class="p">(</span><span class="mi">13</span><span class="p">,</span><span class="mi">16</span><span class="p">)</span>
+        <span class="kr">return</span> <span class="n">FINALans</span><span class="p">,</span><span class="n">HEADER</span>
+    <span class="kr">else</span>
+        <span class="kr">return</span> <span class="s2">&quot;Invalid Key or corrupted file&quot;</span>
+    <span class="kr">end</span>
+<span class="kr">end</span>
+</pre></div>
+</section>
+        <section id="extras" class="body">
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+
+                            <li><a href="https://github.com/JustAPerson/">GitHub</a></li>
+                            <li><a href="mailto:jpriest@mit.edu">Email</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+
+        <footer id="contentinfo" class="body">
+                <address id="about" class="vcard body">
+                Proudly powered by <a href="http://getpelican.com/">Pelican</a>, which takes great advantage of <a href="http://python.org">Python</a>.
+                </address><!-- /#about -->
+
+                <p>The theme is by <a href="http://coding.smashingmagazine.com/2009/08/04/designing-a-html-5-layout-from-scratch/">Smashing Magazine</a>, thanks!</p>
+        </footer><!-- /#contentinfo -->
+
+</body>
+</html>
