@@ -1,5 +1,5 @@
 Title: Perf Wiki
-Slug: wiki/perf/index
+Slug: wiki/perf
 
 # Memory and Cache Hierarchy 
 
