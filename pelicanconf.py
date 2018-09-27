@@ -22,11 +22,11 @@ AUTHOR_FEED_ATOM = None
 AUTHOR_FEED_RSS = None
 
 MENUITEMS = [
-    ("Home", "/"),
-    ("Wiki", "/wiki/"),
+    ("About", "/"),
+    ("Experience", "/about/experience/"),
     ("Projects", "/about/projects/"),
-    ("Resume", "/pdfs/jpriest_resume_fall_2017.pdf"),
-    ("About", "/about/"),
+    ("Classwork", "/about/classwork/"),
+    ("Resume", "/pdfs/jpriest_resume_fall_2018.pdf"),
 ]
 
 # Blogroll

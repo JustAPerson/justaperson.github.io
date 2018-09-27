@@ -1,52 +1,94 @@
 Title: Projects
 Slug: about/projects
 
-# Professional
 
-## _Broadway Technology_, Summer 2018
+## [VOS][] (2015)
 
-At [Broadway][bway] I helped add support for trading commercial paper on their
-core distributed platform by implementing logic to communicate to exchanges via
-the [FIX protocol][fix]. This involved modifying one of their C++ libraries that
-tracks price information about instruments, adding a new battery of tests, and
-debugging many edge cases.
+[VOS][] was my first venture in writing my own operating system. I didn't get
+very far, as I was consumed by the minutia of trying to get Rust to compile for
+16 bit protected mode--[going so far as recompiling many of the core libraries
+myself][vosmake]. Perhaps the most interesting part of this project is the
+reasonably complete and well documented [FAT filesystem implementation][vosfat]
+I planned to use.
 
-In addition, I helped profile and optimize a key C++ data serialization library.
-This library was responsible for parsing FIX messages and embedded XML,
-serializing objects from the Broadway distributed platform and application state
-stored in hashtables, and finally translating between these many formats. I
-wrote both synthetic and representative benchmarks using logs captured from test
-files. I also used Linux's `perf` and `valgrind` commands to identify
-bottlenecks and to eliminate unnecessary memory allocations.
+[vos]: https://github.com/JustAPerson/vos
+[vosmake]: https://github.com/JustAPerson/vos/blob/rust_boot/makefile
+[vosfat]: https://github.com/JustAPerson/vos/blob/master/src/lib/disk/src/fs/fat.rs
 
-[bway]: https://www.broadwaytechnology.com/
-[cp]: https://www.investopedia.com/terms/c/commercialpaper.asp
-[fix]:  https://en.wikipedia.org/wiki/Financial_Information_eXchange
+## [Denuos][] (2016)
 
-## _Ab Initio_, Summer 2017
+[Denuos][] was my second attempt at writing my own operating system. This time I
+got substantially farther. Some features implemented so far: basic VGA
+rendering, keyboard and timer interrupts handled via PIC, dynamically allocated
+memory, and the beginnings of a system call interface with working transitions
+between privilege levels.
 
-At [Ab Initio][ab] I implemented a translation pass between their existing data
-flow graph representation and the format employed by their new experimental 
-optimization engine. As part of this, I wrote logic to enrich the basic data
-graph with additional metadata such as type propagation and liveliness analysis.
+Ultimately, I believe the complexity of Rust is hindering this project, and I
+intend to rewrite it in C. But first, I have to finish writing a preliminary
+implementation [my own C compiler][denuoc].
 
-[ab]: https://www.abinitio.com/en/
+[denuos]: https://github.com/JustAPerson/denuos
+[denuoc]: https://github.com/JustAPerson/denuoc
 
-## _Touchplan_, Summer 2016
+## [LuaCrypt][lc] (2012)
+    
+As I've written about [elsewhere](/about/arcs/), I have an interest in
+cryptography. I tried several times to implement basic security primitives in
+Lua ([despite what everyone says][owncrypto]). I only successfully finished
+SHA2. Eventually some one ended up finding [a bug in my code][lcbug] much to my
+surprise that anyone ever even found my code, let alone used it.
 
-At [Touchplan][tp] I helped distribute their monolithic Java/SQL backend across
-multiple servers using [Apache Mesos][mesos] and [Zookeeper][zk]. I developed
-and tested high availability features such as handling failovers and online
-rolling upgrades.
+[lc]: https://github.com/JustAPerson/LuaCrypt
+[owncrypto]: http://lmgtfy.com/?q=writing+your+own+crypto
+[lcbug]: https://github.com/JustAPerson/LuaCrypt/issues/1
 
-I also developed a script to deploy to this server cluster and message
-build/deployment updates to Slack as a part of their CI/CD system.
+## [Lua Bytecode Interpreter][lbi] (2012)
 
-Finally, I performed basic data analytics and helped evaluate several data
-warehouse solutions.
+[LBI][lbi] was a project initiated out of necessity. I began programming because
+of an online game called [Roblox][roblox], which can vaguely be described as a
+platform for kids to create lego-like games that are scripted using Lua. Roblox
+creators often utilized a technique of obfuscation whereby they uploaded their
+scripts as precompiled bytecode in order to prevent introspection or
+modification. This was a form of copy-protection because scripts were ran on the
+user's computer and could be read from memory and then used to create a
+competing game. In 2012, Roblox removed the `loadstring()` function that enabled
+the loading of bytecode. Thus, by implementing this project I was hoping to
+salvage scripts I and many others had already precompiled.
 
-[tp]: https://www.touchplan.io/
-[mesos]: https://mesos.apache.org/
-[zk]: https://zookeeper.apache.org/
+This functionality was removed because specially crafted bytecode can exploit
+the internal state of the Lua virtual machine and potentially whatever C
+application is using it. These attacks are documented [here][corsix]. I
+attempted to apply some of these attacks to Roblox, but didn't find any C
+functions that seemed exploitable. However, I did encounter several
+modifications the Roblox developers had made to harden the VM, including adding
+read-only tables (as an atomic type, not accomplished through [metatables][mt]).
 
-# Hobby
+I emailed one of the lead developers about both my findings and the original
+documentation of these bugs on 22 August 2011. They largely ignored my findings
+at the time because I had not actually found a useful way to exploit the game.
+Almost exactly one year later, [Roblox announced the removal of
+`loadstring`][byebyebc]. Someone else had found a Roblox API that was vulnerable
+to this exploit.
+
+[lbi]: https://github.com/JustAPerson/lbi
+[roblox]: https://en.wikipedia.org/wiki/Roblox
+[corsix]: https://www.corsix.org/content/lua-514-bug-recap
+[mt]: https://www.lua.org/pil/13.html
+[byebyebc]: https://blog.roblox.com/2012/08/bye-bye-bytecode/
+
+## [Maximum Overdrive System][mods] (2011)
+
+[MODS][mods] is a Lua bytecode assembler and disassembler.
+
+[mods]: https://github.com/JustAPerson/MODS
+
+## [Brainrust][br] (2015)
+
+[Brainrust][br] is a simple [Brainfuck][bf] interpreter. It performs some
+obvious reductions in repetitive instructions. Similarly, [brain86][b86] is a
+trivial 60 line program I wrote to translate Brainfuck to x86 assembly.
+
+[bf]: https://en.wikipedia.org/wiki/Brainfuck
+[br]: https://github.com/JustAPerson/brainrust
+[b86]: https://gist.github.com/JustAPerson/8fe97f1591153a070cc5
+
