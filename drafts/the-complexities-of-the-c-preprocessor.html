@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>The Complexities of the C Preprocessor</title>
+        <link rel="stylesheet" href="/theme/css/main.css" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="/">Pursuing Fast </a></h1>
+                <nav><ul>
+                    <li><a href="/">About</a></li>
+                    <li><a href="/about/projects/">Projects</a></li>
+                    <li><a href="/pdfs/jpriest_resume_fall_2019.pdf">Resume</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="/drafts/the-complexities-of-the-c-preprocessor.html" rel="bookmark"
+           title="Permalink to The Complexities of the C Preprocessor">The Complexities of the C Preprocessor</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2019-12-15T00:00:00-05:00">
+                Published: Sun 15 December 2019
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="/author/jason-priest.html">Jason Priest</a>
+        </address>
+<p>In <a href="/category/programming.html">Programming</a>.</p>
+
+</footer><!-- /.post-info -->      <!-- Compilers can be conceptualized as a sequence of transformations, where each -->
+
+<!-- transformation's input is the output of the previous one. At a high level, a -->
+
+<!-- compiler might look something like this: -->
+
+<!-- ```rust -->
+
+<!-- let input = read("code.c"); -->
+
+<!-- let ast = parse(input); -->
+
+<!-- let ir  = codegen(ast); -->
+
+<!-- let opt = optimize(ir); -->
+
+<!-- let asm = assemble(opt); -->
+
+<!-- let exe = link(asm); -->
+
+<!-- write("a.out", exe); -->
+
+<!-- ``` -->
+
+<!-- It's a sequence of steps. Some of those steps might be very complicated, but -->
+
+<!-- that complexity is isolated to a single step. You can encapsulate and manage -->
+
+<!-- this complexity well, and the boundary between encapsulations is just a single -->
+
+<!-- data structure. -->
+
+<!-- In practice, it's not quite as pretty. There's some global -->
+
+<!-- state kept around for mundane things like what flags the compiler was invoked -->
+
+<!-- with, and it's not always so linear when considering optimization passes. -->
+
+<!-- Furthermore, some compilers[^1] are forgoing these neat boundaries altogether. -->
+
+<!-- [^1]: [Rust](https://rust-lang.github.io/rustc-guide/query.html) is heading -->
+
+<!--     towards a query-driven approach that may be better suited for -->
+
+<!--     parallelization and will also enable caching intermediate results (such as -->
+
+<!--     semantic analysis) on disk. -->
+
+<p>In my efforts to implement a prototype C compiler, I first laid down a framework
+for performing a sequence of simple transformations. In order to test it out, I
+began writing the first few phases of C compilation.</p>
+<p>The C11 standard §5.1.1.2 specifies the following notional phases of compilation:</p>
+<ol>
+<li>The input is mapped to the <em>source character set</em></li>
+<li>Lines ending in a backslash are spliced together</li>
+<li>The input is decomposed into preprocessing tokens</li>
+<li>Preprocessing directives are executed and macros are expanded</li>
+<li>Character and string literals are converted into the <em>execution character set</em></li>
+<li>Adjacent string literals are concatenated</li>
+<li>Parsing, semantic analysis, and codegen occur</li>
+<li>Linking occurs</li>
+</ol>
+<p>I would define <em>preprocessing</em> as anything that occurs before parsing. Clang and
+GCC would disagree<sup id="fnref:disagree"><a class="footnote-ref" href="#fn:disagree">1</a></sup>. In comparison to phase seven, which comprises the
+vast majority the compiler's work, the first six phases are relatively simple to
+implement.</p>
+<p>Phase one handles parsing the bytes of the input file and interpreting them as
+some encoding of a string. For now, I interpret the input as <a href="https://en.wikipedia.org/wiki/UTF-8">UTF-8</a>.
+Conceptually however, the input could be converted from some other encoding
+using a tool like <a href="https://en.wikipedia.org/wiki/Iconv">iconv</a>. Additionally, here <a href="https://en.wikipedia.org/wiki/Digraphs_and_trigraphs#C">trigraphs</a> (three character
+synonyms for certain symbols, such as <code>??/</code> which maps to <code>\</code>) are
+converted<sup id="fnref:digraphs"><a class="footnote-ref" href="#fn:digraphs">2</a></sup>.</p>
+<p>Phase two, the joining of lines ending in a backslash, is very easy to implement
+and permits multi-line macros. Phase three is where things start to get a little
+complex. I use a <a href="https://github.com/JustAPerson/denuocc/blob/7461de1879481e82422bbc060262183ac3a0379a/src/passes/preprocess_phase3.rs#L28-L85">convoluted set of regexs</a> to match the various
+preprocessing tokens. However, ignoring the actual regex patterns, this is still
+pretty simple logic.</p>
+<p>Phase five can be ignored for now as I assume both the <em>source</em> and <em>execution
+character sets</em> are UTF-8, but again, it is a matter of using a tool like
+<code>iconv</code> to perform the transcoding. Phase six, concatenating adjacent string
+literals, is perhaps my favorite feature of C I find myself missing in other
+languages.</p>
+<h1 id="phase-four">Phase Four</h1>
+<p>Phase four performs the bulk of what is meant by preprocessing. Its primary
+features are file inclusion, macro expansion, and conditional compilation. Each
+of these correspond to a different <em>preprocessing directive</em>, which is a line
+that looks something like:</p>
+<div class="highlight"><pre><span></span><span class="cp">#include</span> <span class="cpf">&quot;file&quot;</span><span class="cp"></span>
+</pre></div>
+
+
+<p>It starts with a <code>#</code>, is followed by a directive name, and continues until the
+end of the line. Thus, it is easy to recognize directives by examining tokens
+one at a time. However, this leads to two problems: rescanning and other
+directives.</p>
+<p>When a macro is expanded, it is eligible for <em>rescanning</em>. Consider the following:</p>
+<div class="highlight"><pre><span></span><span class="cp">#define a test</span>
+<span class="cp">#define test() hmm</span>
+<span class="n">a</span><span class="p">()</span>
+</pre></div>
+
+
+<p>This will result in <code>hmm</code> through the following logic: <code>a</code> is replaced with
+<code>test</code>; this result is <em>rescanned</em>, meaning in effect is it prepended to the
+remainder of the input; now the remaining input looks like <code>test()</code> which
+expands to <code>hmm</code>.</p>
+<h2 id="multiline-macro-invocations">Multiline Macro Invocations</h2>
+<p>Consider the following:</p>
+<div class="highlight"><pre><span></span><span class="cp">#define foo() bar</span>
+<span class="n">foo</span>
+<span class="p">()</span>
+</pre></div>
+
+
+<p>This expands to <code>bar</code>. Any amount of whitespace between a function-like macro's
+name and its opening parenthesis is acceptable. Similarly, newlines may occur
+within the parentheses of a macro function.</p>
+<div class="highlight"><pre><span></span><span class="cp">#define foo(a, b) a + b</span>
+<span class="n">foo</span><span class="p">(</span>
+  <span class="mi">1</span><span class="p">,</span>
+  <span class="mi">2</span>
+<span class="p">)</span>
+<span class="c1">// results in `1 + 2`</span>
+</pre></div>
+
+
+<p>But what should happen if you include another preprocessor directive between the
+parentheses of a macro function?</p>
+<div class="highlight"><pre><span></span><span class="cp">#define foo() bar</span>
+<span class="n">foo</span><span class="p">(</span>
+  <span class="cp">#define bar baz</span>
+<span class="p">)</span>
+<span class="c1">// results in `baz`?</span>
+</pre></div>
+
+
+<p>Technically this is undefined behavior<sup id="fnref:ubmacro"><a class="footnote-ref" href="#fn:ubmacro">3</a></sup>, but curiously both GCC and Clang
+implement this functionality<sup id="fnref:theydoit"><a class="footnote-ref" href="#fn:theydoit">4</a></sup>. Both treat any <code>#define</code> directives as if they
+had occurred just before the macro invocation, and they both handle <code>#if</code>
+conditional inclusion.</p>
+<p>Both <code>#define</code> and <code>#if</code> have caused separate complications in my implementation.</p>
+<p>Ultimately, this feature likely sees little use, since just about any use of a
+directive within a macro invocation causes MSVC to crash. I wonder what happens
+if a macro-spans multiple files...<sup id="fnref:ubmacro2"><a class="footnote-ref" href="#fn:ubmacro2">5</a></sup></p>
+<!-- TODO https://blog.robertelder.org/7-weird-old-things-about-the-c-preprocessor/ -->
+
+<!-- TODO X3J11/86-196 -->
+
+<!-- TODO error handling / location tracking -->
+
+<!-- TODO use this footnote -->
+
+<!-- [^todo]: On my system with with GCC 7.4, `cpp -dM /dev/null` lists 347 default -->
+
+<!--     macro definitions. -->
+
+<div class="footnote">
+<hr>
+<ol>
+<li id="fn:disagree">
+<p>Based on invoking these compilers with the <code>-E</code> flag for
+preprocessing only, it appears they only perform the first four phases,
+whereas I would consider <em>preprocessing</em> to entail the first six phases.&#160;<a class="footnote-backref" href="#fnref:disagree" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:digraphs">
+<p>I have not found a good explanation why digraphs (similar two
+character synonyms, such as <code>&lt;:</code> which maps to <code>[</code>) are not handled
+similarly.&#160;<a class="footnote-backref" href="#fnref:digraphs" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:ubmacro">
+<p>Dating back to C89 §6.8.3, or found now in C11 §6.10.3.11&#160;<a class="footnote-backref" href="#fnref:ubmacro" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:theydoit">
+<p>They will warn about this with the <code>-Wpedantic</code> flag&#160;<a class="footnote-backref" href="#fnref:theydoit" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+<li id="fn:ubmacro2">
+<p>The C standards committee has recently considered making macros
+that span multiple files undefined behavior because some implementations
+cannot handle this.<a href="http://www.open-std.org/jtc1/sc22/wg14/www/docs/n2324.htm">Source</a>. It appears they have voted against this
+for the time being. <a href="https://thephd.github.io/follow-the-river-wg14-ithaca-2019#undefined-behavior--in-the-preprocessor">Source</a>&#160;<a class="footnote-backref" href="#fnref:ubmacro2" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+    </div><!-- /.entry-content -->
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+
+                            <li><a href="https://github.com/JustAPerson/">GitHub</a></li>
+                            <li><a href="mailto:jason@jpriest.me">Email</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+</body>
+</html>

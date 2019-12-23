@@ -17,48 +17,40 @@
                 <nav><ul>
                     <li><a href="/">About</a></li>
                     <li><a href="/blog/">Blog</a></li>
+                    <li><a href="/about/experience/">Experience</a></li>
                     <li><a href="/about/projects/">Projects</a></li>
+                    <li><a href="/about/classwork/">Classwork</a></li>
                     <li><a href="/pdfs/jpriest_resume_fall_2019.pdf">Resume</a></li>
                 </ul></nav>
         </header><!-- /#banner -->
 <section id="content" class="body">
     <h1 class="entry-title">Projects</h1>
     
-    <p>I began programming sometime around 2008, but the earliest <a href="/about/arcs/">written code I can
-find dates back to 2010</a>. I first learned <a href="https://www.lua.org/">Lua</a> via the game
-<a href="https://en.wikipedia.org/wiki/Roblox">Roblox</a>. I never got too into the whole game programming scene, but I quickly
-developed a passion for exploring new concepts. I have a huge case of <a href="https://en.wikipedia.org/wiki/Not_invented_here">Not
-Invented Here</a> syndrome, so I love trying to program things to figure out
-how they work.</p>
-<h2 id="denuocc-2019"><a href="https://github.com/JustAPerson/denuocc">DenuoCC</a> (2019)</h2>
-<p>The Denuo C Compiler is my second attempt at a C compiler. Currently I am working on the
-front end, including the preprocessor, a deterministic recursive-descent parser,
+    <h2 id="denuocc-2019"><a href="https://github.com/JustAPerson/denuocc">DenuoCC</a> (2019)</h2>
+<p><a href="https://github.com/JustAPerson/denuocc">DenuoCC</a> is my second attempt at a C compiler. Currently I am working on the
+front end, including the preprocessor, a backtracking recursive-descent parser,
 comprehensive error messages, and thorough unit tests.</p>
+<h2 id="vos-2015"><a href="https://github.com/JustAPerson/vos">VOS</a> (2015)</h2>
+<p><a href="https://github.com/JustAPerson/vos">VOS</a> was my first venture in writing my own operating system. I didn't get
+very far, as I was consumed by the minutia of trying to get Rust to compile for
+16 bit protected mode--<a href="https://github.com/JustAPerson/vos/blob/rust_boot/makefile">going so far as recompiling many of the core libraries
+myself</a>. Perhaps the most interesting part of this project is the
+reasonably complete and well documented <a href="https://github.com/JustAPerson/vos/blob/master/src/lib/disk/src/fs/fat.rs">FAT filesystem implementation</a>
+I planned to use.</p>
 <h2 id="denuos-2016"><a href="https://github.com/JustAPerson/denuos">Denuos</a> (2016)</h2>
-<p>Denuos was my second attempt at writing my own operating system. This time I
+<p><a href="https://github.com/JustAPerson/denuos">Denuos</a> was my second attempt at writing my own operating system. This time I
 got substantially farther. Some features implemented so far: basic VGA
 rendering, keyboard and timer interrupts handled via PIC, dynamically allocated
 memory, and the beginnings of a system call interface with working transitions
 between privilege levels.</p>
-<h2 id="vos-2015"><a href="https://github.com/JustAPerson/vos">VOS</a> (2015)</h2>
-<p>VOS was my first venture in writing my own operating system. I didn't get very
-far, as I was consumed by the minutia of trying to get Rust to compile for 16
-bit protected mode--<a href="https://github.com/JustAPerson/vos/blob/rust_boot/makefile">going so far as recompiling many of the core libraries
-myself</a> before there was much ecosystem support for this. Perhaps the
-most interesting part of this project is the reasonably complete and well
-documented <a href="https://github.com/JustAPerson/vos/blob/master/src/lib/disk/src/fs/fat.rs">FAT filesystem implementation</a> I planned to use.</p>
-<h2 id="brainrust-2015"><a href="https://github.com/JustAPerson/brainrust">Brainrust</a> (2015)</h2>
-<p>Brainrust is a simple <a href="https://en.wikipedia.org/wiki/Brainfuck">Brainfuck</a> interpreter. It performs some
-obvious reductions in repetitive instructions. Similarly, <a href="https://gist.github.com/JustAPerson/8fe97f1591153a070cc5">brain86</a> is a
-trivial 60 line program I wrote to translate Brainfuck to x86 assembly.</p>
 <h2 id="luacrypt-2012"><a href="https://github.com/JustAPerson/LuaCrypt">LuaCrypt</a> (2012)</h2>
 <p>As I've written about <a href="/about/arcs/">elsewhere</a>, I have an interest in
 cryptography. I tried several times to implement basic security primitives in
-Lua (<a href="http://lmgtfy.com/?q=roll+your+own+crypto">despite what everyone says</a>). I only successfully finished
+Lua (<a href="http://lmgtfy.com/?q=writing+your+own+crypto">despite what everyone says</a>). I only successfully finished
 SHA2. Eventually some one ended up finding <a href="https://github.com/JustAPerson/LuaCrypt/issues/1">a bug in my code</a> much to my
 surprise that anyone ever even found my code, let alone used it.</p>
 <h2 id="lua-bytecode-interpreter-2012"><a href="https://github.com/JustAPerson/lbi">Lua Bytecode Interpreter</a> (2012)</h2>
-<p>LBI was a project initiated out of necessity. I began programming because
+<p><a href="https://github.com/JustAPerson/lbi">LBI</a> was a project initiated out of necessity. I began programming because
 of an online game called <a href="https://en.wikipedia.org/wiki/Roblox">Roblox</a>, which can vaguely be described as a
 platform for kids to create lego-like games that are scripted using Lua. Roblox
 creators often utilized a technique of obfuscation whereby they uploaded their
@@ -82,7 +74,11 @@ Almost exactly one year later, <a href="https://blog.roblox.com/2012/08/bye-bye-
 <code>loadstring</code></a>. Someone else had found a Roblox API that was vulnerable
 to this exploit.</p>
 <h2 id="maximum-overdrive-system-2011"><a href="https://github.com/JustAPerson/MODS">Maximum Overdrive System</a> (2011)</h2>
-<p>MODS is a Lua bytecode assembler and disassembler.</p>
+<p><a href="https://github.com/JustAPerson/MODS">MODS</a> is a Lua bytecode assembler and disassembler.</p>
+<h2 id="brainrust-2015"><a href="https://github.com/JustAPerson/brainrust">Brainrust</a> (2015)</h2>
+<p><a href="https://github.com/JustAPerson/brainrust">Brainrust</a> is a simple <a href="https://en.wikipedia.org/wiki/Brainfuck">Brainfuck</a> interpreter. It performs some
+obvious reductions in repetitive instructions. Similarly, <a href="https://gist.github.com/JustAPerson/8fe97f1591153a070cc5">brain86</a> is a
+trivial 60 line program I wrote to translate Brainfuck to x86 assembly.</p>
 </section>
         <section id="extras" class="body">
                 <div class="social">

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>Using `setxkbmap`</title>
+        <link rel="stylesheet" href="/theme/css/main.css" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="/">Pursuing Fast </a></h1>
+                <nav><ul>
+                    <li><a href="/">About</a></li>
+                    <li><a href="/blog/">Blog</a></li>
+                    <li><a href="/about/projects/">Projects</a></li>
+                    <li><a href="/pdfs/jpriest_resume_fall_2019.pdf">Resume</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="/blog/using-setxkbmap/" rel="bookmark"
+           title="Permalink to Using `setxkbmap`">Using `setxkbmap`</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2019-12-17T00:00:00-05:00">
+                Published: 2019-12-17
+        </abbr>
+<p>In <a href="/blog/category/linux/">Linux</a>.</p>
+
+</footer><!-- /.post-info -->      <p>After using Ubuntu for a number of years, I was quite accustomed to customizing
+my desktop experience using the GUI tools provided by GNOME. In the past year, I
+have been using <a href="https://awesomewm.org/">awesome</a>, a tiling window manager. Some things can still be
+configured using the <code>gnome-control-center</code> application, but I have also been
+experimenting more with using the underlying technologies that GNOME uses behind
+the scenes.</p>
+<p>Today, I wanted to change my keyboard settings so I can type moderately fancy
+letters like <code>éàîöŭ</code>. There are two common ways to approach this, and which you
+choose probably depends on the frequency you need such characters. First, you
+can use a <strong>compose key</strong>, so that you type a combination like <code>Compose ' e</code> to
+get <code>é</code>. Second, you can use <strong>dead keys</strong>, where typing one of the prefixes
+like <code>'</code> enters a state where you can type another letter like any of <code>aiueo</code> to
+get <code>áíúéó</code> respectively or you can type <code>'</code> again to get that actual single
+quote character. Since I don't foresee needing to type <em>that</em> much using these
+characters, I went with a compose key. Additionally, I will also describe how to
+enable dead keys for a US keyboard.</p>
+<p>From what I've learned, the easiest way to accommodate this is to use the
+existing Debian keyboard config files. You can read about the semantics in the
+<code>keyboard(5)</code> manpage. The system wide file is <code>/etc/default/keyboard</code>, but it
+appears <code>~/.keyboard</code> should also work. This file is a list of variables that
+looked like this by default for me:</p>
+<div class="highlight"><pre><span></span><span class="c1"># KEYBOARD CONFIGURATION FILE</span>
+<span class="c1"># Consult the keyboard(5) manual page.</span>
+
+<span class="nv">XKBMODEL</span><span class="o">=</span><span class="s2">&quot;pc105&quot;</span>
+<span class="nv">XKBLAYOUT</span><span class="o">=</span><span class="s2">&quot;us&quot;</span>
+<span class="nv">XKBVARIANT</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+<span class="nv">XKBOPTIONS</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+<span class="nv">BACKSPACE</span><span class="o">=</span><span class="s2">&quot;guess&quot;</span>
+</pre></div>
+
+
+<p>For enabling dead keys, it appears as simple as setting <code>XKBVARIANT="intl"</code>. For
+choosing a compose key, we would like to modify <code>XKBOPTIONS</code>. There are a lot
+options to choose from, but the ones relevant to us are the following:</p>
+<div class="highlight"><pre><span></span>$ grep &quot;compose:&quot; /usr/share/X11/xkb/rules/xorg.lst
+  compose:ralt         Right Alt
+  compose:lwin         Left Win
+  compose:lwin-altgr   3rd level of Left Win
+  compose:rwin         Right Win
+  compose:rwin-altgr   3rd level of Right Win
+  compose:menu         Menu
+  compose:menu-altgr   3rd level of Menu
+  compose:lctrl        Left Ctrl
+  compose:lctrl-altgr  3rd level of Left Ctrl
+  compose:rctrl        Right Ctrl
+  compose:rctrl-altgr  3rd level of Right Ctrl
+  compose:caps         Caps Lock
+  compose:caps-altgr   3rd level of Caps Lock
+  compose:102          &amp;lt;Less/Greater&amp;gt;
+  compose:102-altgr    3rd level of &amp;lt;Less/Greater&amp;gt;
+  compose:paus         Pause
+  compose:prsc         PrtSc
+  compose:sclk         Scroll Lock
+</pre></div>
+
+
+<p>I chose to use Right Alt. In addition, I prefer to change the semantics of the
+capslock key, and there are several options for that. Ultimately, I set
+<code>XKBOPTIONS="compose:ralt,caps:ctrl_modifier"</code> in <code>~/.keyboard</code>.</p>
+<h1 id="going-further">Going Further</h1>
+<p>I decide while I was playing with keyboard configurations, I would attempt to
+fix a minor inconvenience I've experienced. I primarily use a wireless keyboard
+to type on my laptop. The wireless and internal keyboards have slightly
+different layouts. The internal keyboard has the super key to the left of the
+spacebar whereas the wireless keyboard has the alt key in that position. Thus,
+I'd like to switch these keys around on <strong>only one</strong> device. This cannot be
+achieved using the <code>~/.keyboard</code> file as far as I can tell.</p>
+<p><code>setxkbmap</code> is a utility that can set the same parameters as the variables
+accepted by the <code>~/.keyboard</code> file. More importantly, <code>setxkbmap</code> can configure a
+specific X device using the <code>-device</code> flag. We can invoke <code>setxkbmap</code> inside the
+<code>~/.xinitrc</code> script that will be executed by any X session.</p>
+<p>First, we use <code>xinput</code> to print the available input devices:</p>
+<div class="highlight"><pre><span></span>$ xinput
+⎡ Virtual core pointer                          id=2    [master pointer  (3)]
+⎜   ↳ Virtual core XTEST pointer                id=4    [slave  pointer  (2)]
+⎜   ↳ bcm5974                                   id=11   [slave  pointer  (2)]
+⎜   ↳ Logitech M570                             id=12   [slave  pointer  (2)]
+⎜   ↳ Logitech K400 Plus                        id=13   [slave  pointer  (2)]
+⎣ Virtual core keyboard                         id=3    [master keyboard (2)]
+    ↳ Virtual core XTEST keyboard               id=5    [slave  keyboard (3)]
+    ↳ Power Button                              id=6    [slave  keyboard (3)]
+    ↳ Video Bus                                 id=7    [slave  keyboard (3)]
+    ↳ Power Button                              id=8    [slave  keyboard (3)]
+    ↳ Sleep Button                              id=9    [slave  keyboard (3)]
+    ↳ Apple Inc. Apple Internal Keyboard / Trackpad     id=10   [slave  keyboard (3)]
+    ↳ Logitech K400 Plus                        id=14   [slave  keyboard (3)]
+</pre></div>
+
+
+<p>We want to select two of the <em>slave keyboards</em>. There's probably a better way to
+extract the device id, but I used <code>grep</code> and <code>sed</code> like so:</p>
+<div class="highlight"><pre><span></span><span class="nv">kb1</span><span class="o">=</span><span class="k">$(</span>xinput <span class="p">|</span> grep -E <span class="s2">&quot;Logitech K400 Plus.+keyboard&quot;</span> <span class="p">|</span> sed -E <span class="s2">&quot;s/^.*id=([0-9]+).*</span>$<span class="s2">/\1/&quot;</span><span class="k">)</span>
+<span class="nv">kb2</span><span class="o">=</span><span class="k">$(</span>xinput <span class="p">|</span> grep -E <span class="s2">&quot;Apple Inc.+keyboard&quot;</span> <span class="p">|</span> sed -E <span class="s2">&quot;s/^.*id=([0-9]+).*</span>$<span class="s2">/\1/&quot;</span><span class="k">)</span>
+</pre></div>
+
+
+<p>I prefer having super, which I use more often, close to the space bar, so I want
+ to swap them on the wireless keyboard. In addition to the other values from the
+ <code>XKBOPTIONS</code> variable from our <code>~/.keyboard</code>, I can use the
+ <code>altwin:swap_lalt_lwin</code> option to achieve the desired behavior.</p>
+<p>There are two remaining details. Whereas the <code>~/.keyboard</code> file accepts a
+ comma-separated list of options, we must pass each option as a separate flag to
+ <code>setxkbmap</code>. Additionally, it seems we must first clear all the options using
+ <code>-option ""</code> before we can set device-specific options. Otherwise both devices
+ end up with the union of their options it seems.</p>
+<p>Thus finally, my <code>~/.xinitrc</code> script looks like so:</p>
+<div class="highlight"><pre><span></span><span class="nv">kb1</span><span class="o">=</span><span class="k">$(</span>xinput <span class="p">|</span> grep -E <span class="s2">&quot;Logitech K400 Plus.+keyboard&quot;</span> <span class="p">|</span> sed -E <span class="s2">&quot;s/^.*id=([0-9]+).*</span>$<span class="s2">/\1/&quot;</span><span class="k">)</span>
+<span class="nv">kb2</span><span class="o">=</span><span class="k">$(</span>xinput <span class="p">|</span> grep -E <span class="s2">&quot;Apple Inc.+keyboard&quot;</span> <span class="p">|</span> sed -E <span class="s2">&quot;s/^.*id=([0-9]+).*</span>$<span class="s2">/\1/&quot;</span><span class="k">)</span>
+
+setxkbmap -device <span class="nv">$kb1</span> -layout us -option <span class="s2">&quot;&quot;</span> -option compose:ralt <span class="se">\</span>
+                                  -option caps:ctrl_modifier      <span class="se">\</span>
+                                  -option altwin:swap_lalt_lwin
+setxkbmap -device <span class="nv">$kb2</span> -layout us -option <span class="s2">&quot;&quot;</span> -option compose:ralt <span class="se">\</span>
+                                  -option caps:ctrl_modifier
+</pre></div>
+
+
+<h1 id="making-things-work">Making Things Work</h1>
+<p>With the <code>~/.xinitrc</code> script in place, you can either execute it manually or log
+in again. It should now be possible to use the compose key in every application.
+Well, everything except Emacs it seems. This issue seems to date back ten
+years<sup id="fnref:1"><a class="footnote-ref" href="#fn:1">1</a></sup>, rediscovered on the emacs-devel list five years ago<sup id="fnref:2"><a class="footnote-ref" href="#fn:2">2</a></sup> and allegedly
+fixed<sup id="fnref:3"><a class="footnote-ref" href="#fn:3">3</a></sup> around version 24.4. However, when I press the compose key in Emacs
+25.2.2 graphical window (not in a terminal), the compose key does not work and
+instead I get a message that <code>&lt;Multi_key&gt; is undefined</code>.</p>
+<p>The simplest solution is to create the following wrapper script somewhere early in your <code>$PATH</code> like  <code>~/.local/bin/emacs</code>:</p>
+<div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
+env -u XMODIFIERS /usr/bin/emacs <span class="nv">$@</span>
+</pre></div>
+
+
+<div class="footnote">
+<hr>
+<ol>
+<li id="fn:1">
+<p><a href="https://bugs.launchpad.net/ubuntu/+source/emacs23/+bug/493766">https://bugs.launchpad.net/ubuntu/+source/emacs23/+bug/493766</a>&#160;<a class="footnote-backref" href="#fnref:1" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p><a href="https://lists.gnu.org/archive/html/emacs-devel/2014-03/msg00867.html">https://lists.gnu.org/archive/html/emacs-devel/2014-03/msg00867.html</a>&#160;<a class="footnote-backref" href="#fnref:2" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p><a href="https://lists.gnu.org/archive/html/emacs-devel/2014-03/msg00881.html">https://lists.gnu.org/archive/html/emacs-devel/2014-03/msg00881.html</a>&#160;<a class="footnote-backref" href="#fnref:3" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+    </div><!-- /.entry-content -->
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+
+                            <li><a href="https://github.com/JustAPerson/">GitHub</a></li>
+                            <li><a href="mailto:jason@jpriest.me">Email</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+</body>
+</html>
