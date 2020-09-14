@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+        <meta charset="utf-8" />
+        <title>Setting Up A RAID Array on Linux</title>
+        <link rel="stylesheet" href="/theme/css/main.css" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
+
+        <!--[if IE]>
+            <script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <![endif]-->
+</head>
+
+<body id="index" class="home">
+        <header id="banner" class="body">
+                <h1><a href="/">Jason Priest </a></h1>
+                <nav><ul>
+                    <li><a href="/">About</a></li>
+                    <li><a href="/about/projects/">Projects</a></li>
+                    <li><a href="https://github.com/JustAPerson">GitHub</a></li>
+                    <li><a href="/pdfs/jpriest_resume_fall_2020v5.pdf">Resume</a></li>
+                </ul></nav>
+        </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="/blog/drafts/setting-up-a-raid-array-on-linux/" rel="bookmark"
+           title="Permalink to Setting Up A RAID Array on Linux">Setting Up A RAID Array on Linux</a></h1>
+    </header>
+
+    <div class="entry-content">
+<footer class="post-info">
+        <abbr class="published" title="2020-02-24T00:00:00-05:00">
+                Published: 2020-02-24
+        </abbr>
+<p>In <a href="/blog/category/linux/">Linux</a>.</p>
+
+</footer><!-- /.post-info -->      <p>I recently<sup id="fnref:recently"><a class="footnote-ref" href="#fn:recently">1</a></sup> built a new computer and decided it was time to expand my local
+storage. Over the years I've collected about 2TB of data. Mostly games
+downloaded from Steam or pictures/videos I've archived from online. As the folks over
+at [/r/DataHoarder][rdr] can attest, media archival and categorization can be an
+interesting past time. Not to mention it is occasionally useful to
+have local copies of things that might disappear from the internet one day.</p>
+<p>To get started, I could simply buy a large <a href="https://www.amazon.com/dp/B07H7CW4YT">14TB hard drive</a>, but with
+4 out of 5 of my computer's hard drive bays already occupied, that doesn't leave
+me much space to expand. If that drive were to fail, I'd also be out of luck.
+Instead I went a <a href="https://www.amazon.com/dp/product/B07G5NZ35Q/">Mediasonic 8 bay hard drive enclosure</a>. This plugs
+in via a 10gbps USB C 3.0 connector as opposed to the typical NAS solution which
+is connected over a network. This unit sells for around $350 whereas an
+equivalent NAS unit might go for closer to $1000. I also bought 2 <a href="https://www.amazon.com/dp/B07G3QMPB5/">10TB external
+hard drives</a> to kick off my array, leaving me plenty of room to expand.</p>
+<p>The drives I bought are external hard drives that come in a plastic case. It
+ends up being much cheaper to purchase these as opposed to a stand alone hard
+drive. Part of the discrepancy is that it's a bit of a lottery--these external
+units aren't guaranteed a hard drive rated for 24/7 use in close proximity to
+other hard drives. But since we'll be setting up a <a href="https://en.wikipedia.org/wiki/RAID">redundant array of
+inexpensive disks</a>, a slightly higher chance of failure and having to wait
+for data to recover is worth avoiding a 50% premium. In order to fit them into
+the new enclosure, first you have to "shuck" them by <a href="https://www.youtube.com/watch?v=7XyUHcaJLLE#t=1m25s">prying off the case</a>.</p>
+<p>Before shucking, it might be worthwhile testing for early signs of drive failure
+in order to return them before damaging the plastic cases. Two simple options
+are <a href="https://linux.die.net/man/8/badblocks"><code>badblocks</code></a> and <a href="https://linux.die.net/man/8/smartctl"><code>smartctl -t</code></a> both of which can
+traverse the entire drive in search of errors. Afterwards you should use
+<code>smartctl -A</code> to review the S.M.A.R.T. attributes to spot anything suspicious.
+With my drives maxing out at about 200MB/s sustained read speeds, a full
+traversal would take around 15 hours. With sustained write speeds being even
+slower, rebuilding the array would take closer to 2 days.</p>
+<p>One drawback of the Mediasonic enclosure I purchased is that it behaves as a USB
+hub with many USB drives attached. Some utilities may show entries for the
+unoccupied bays as USB drives. The operating system still communicates with the
+drives via the SATA protocol but there is some conversion involved and people
+are uncertain of the reliability therein. Most concerns with USB hard drives for
+RAID however are mainly centered on a lack of ventilation, protection from
+vibration, and the risk of accidentally unplugging--most of which we've dealt
+with using dedicated, ventilated enclosure. I'm uncertain if it's due to the
+particular USB-SATA bridge used by Mediasonic or the particular WesternDigital
+drives I got, but I have to also supply <code>-d sat</code> to get <code>smartctl</code> working.</p>
+<p>With all that context, it's finally time to create our array. Since I only have
+two drives at the moment, I'll be using RAID1 also known as mirror. After
+purchasing more drives, we can upgrade the array to a more efficient format like
+RAID5/6. Note that when expanding an array, each disk can only utilize as much
+as the capacity of the smallest disk, so there's little reason to expand an
+array with drives smaller than the existing ones.</p>
+<p>We'll use <code>mdadm(8)</code> to create and manage our array. This is the userspace utility
+to interface with the well-establish linux <code>md(4)</code> system. But first, let's
+figure out how to refer to these drives.</p>
+<div class="highlight"><pre><span></span>$ lsblk -oname,vendor,model,serial,size --nodeps --exclude <span class="m">7</span>
+KNAME VENDOR   MODEL            SERIAL    SIZE
+...
+sdi   WDC WD10 0EMAZ-00WJTA0    2YHGU4KD  <span class="m">9</span>.1T
+sdj   WDC WD10 0EMAZ-00WJTA0    2YHGU03D  <span class="m">9</span>.1T
+</pre></div>
+
+
+<p>Typically drives are referred to such as <code>/dev/sdi</code> but the order of these
+labels is unreliable, so let's refer to them by their IDs, such as
+<code>/dev/disk/by-id/ata-WDC_WD100EMAZ-00WJTA0_2YHGU03D</code>.</p>
+<div class="highlight"><pre><span></span><span class="o">$</span> <span class="n">sudo</span> <span class="n">mdadm</span> <span class="o">--</span><span class="n">create</span> <span class="o">--</span><span class="n">verbose</span> <span class="o">/</span><span class="n">dev</span><span class="o">/</span><span class="n">md0</span> <span class="o">--</span><span class="n">level</span><span class="o">=</span><span class="n">raid1</span> <span class="o">--</span><span class="n">failfast</span> \
+             <span class="o">--</span><span class="n">raid</span><span class="o">-</span><span class="n">devices</span><span class="o">=</span><span class="mi">2</span> <span class="o">/</span><span class="n">dev</span><span class="o">/</span><span class="n">disk</span><span class="o">/</span><span class="n">by</span><span class="o">-</span><span class="n">id</span><span class="o">/</span><span class="n">ata</span><span class="o">-</span><span class="n">WDC_WD100EMAZ</span><span class="o">-</span><span class="mi">00</span><span class="n">WJTA0_2YHGU</span><span class="p">{</span><span class="mi">03</span><span class="n">D</span><span class="p">,</span><span class="mi">4</span><span class="n">KD</span><span class="p">}</span>
+<span class="n">mdadm</span><span class="p">:</span> <span class="n">partition</span> <span class="n">table</span> <span class="n">exists</span> <span class="n">on</span> <span class="o">/</span><span class="n">dev</span><span class="o">/</span><span class="n">disk</span><span class="o">/</span><span class="n">by</span><span class="o">-</span><span class="n">id</span><span class="o">/</span><span class="n">ata</span><span class="o">-</span><span class="n">WDC_WD100EMAZ</span><span class="o">-</span><span class="mi">00</span><span class="n">WJTA0_2YHGU03D</span>
+<span class="n">mdadm</span><span class="p">:</span> <span class="n">partition</span> <span class="n">table</span> <span class="n">exists</span> <span class="n">on</span> <span class="o">/</span><span class="n">dev</span><span class="o">/</span><span class="n">disk</span><span class="o">/</span><span class="n">by</span><span class="o">-</span><span class="n">id</span><span class="o">/</span><span class="n">ata</span><span class="o">-</span><span class="n">WDC_WD100EMAZ</span><span class="o">-</span><span class="mi">00</span><span class="n">WJTA0_2YHGU03D</span> <span class="n">but</span> <span class="n">will</span> <span class="n">be</span> <span class="n">lost</span> <span class="ow">or</span>
+       <span class="n">meaningless</span> <span class="n">after</span> <span class="n">creating</span> <span class="n">array</span>
+<span class="n">mdadm</span><span class="p">:</span> <span class="n">Note</span><span class="p">:</span> <span class="n">this</span> <span class="n">array</span> <span class="n">has</span> <span class="n">metadata</span> <span class="n">at</span> <span class="n">the</span> <span class="n">start</span> <span class="ow">and</span>
+    <span class="n">may</span> <span class="ow">not</span> <span class="n">be</span> <span class="n">suitable</span> <span class="k">as</span> <span class="n">a</span> <span class="n">boot</span> <span class="n">device</span><span class="o">.</span>  <span class="n">If</span> <span class="n">you</span> <span class="n">plan</span> <span class="n">to</span>
+    <span class="n">store</span> <span class="s1">&#39;/boot&#39;</span> <span class="n">on</span> <span class="n">this</span> <span class="n">device</span> <span class="n">please</span> <span class="n">ensure</span> <span class="n">that</span>
+    <span class="n">your</span> <span class="n">boot</span><span class="o">-</span><span class="n">loader</span> <span class="n">understands</span> <span class="n">md</span><span class="o">/</span><span class="n">v1</span><span class="o">.</span><span class="n">x</span> <span class="n">metadata</span><span class="p">,</span> <span class="ow">or</span> <span class="n">use</span>
+    <span class="o">--</span><span class="n">metadata</span><span class="o">=</span><span class="mf">0.90</span>
+<span class="n">mdadm</span><span class="p">:</span> <span class="n">partition</span> <span class="n">table</span> <span class="n">exists</span> <span class="n">on</span> <span class="o">/</span><span class="n">dev</span><span class="o">/</span><span class="n">disk</span><span class="o">/</span><span class="n">by</span><span class="o">-</span><span class="n">id</span><span class="o">/</span><span class="n">ata</span><span class="o">-</span><span class="n">WDC_WD100EMAZ</span><span class="o">-</span><span class="mi">00</span><span class="n">WJTA0_2YHGU4KD</span>
+<span class="n">mdadm</span><span class="p">:</span> <span class="n">partition</span> <span class="n">table</span> <span class="n">exists</span> <span class="n">on</span> <span class="o">/</span><span class="n">dev</span><span class="o">/</span><span class="n">disk</span><span class="o">/</span><span class="n">by</span><span class="o">-</span><span class="n">id</span><span class="o">/</span><span class="n">ata</span><span class="o">-</span><span class="n">WDC_WD100EMAZ</span><span class="o">-</span><span class="mi">00</span><span class="n">WJTA0_2YHGU4KD</span> <span class="n">but</span> <span class="n">will</span> <span class="n">be</span> <span class="n">lost</span> <span class="ow">or</span>
+       <span class="n">meaningless</span> <span class="n">after</span> <span class="n">creating</span> <span class="n">array</span>
+<span class="n">mdadm</span><span class="p">:</span> <span class="n">size</span> <span class="n">set</span> <span class="n">to</span> <span class="mi">9766304768</span><span class="n">K</span>
+<span class="n">mdadm</span><span class="p">:</span> <span class="n">automatically</span> <span class="n">enabling</span> <span class="n">write</span><span class="o">-</span><span class="n">intent</span> <span class="n">bitmap</span> <span class="n">on</span> <span class="n">large</span> <span class="n">array</span>
+<span class="n">Continue</span> <span class="n">creating</span> <span class="n">array</span><span class="err">?</span>
+</pre></div>
+
+
+<p>Note one important detail if you plan to upgrade to a parity raid later. For
+now, <code>mdadm</code> has enabled a write-intent bitmap. This does not play well with a
+write-journal which is important for RAID5/6. Remember to specify <code>--bitmap=none</code>.</p>
+<div class="footnote">
+<hr>
+<ol>
+<li id="fn:recently">
+<p>Like 16 months ago when I first drafted most of this article
+[rdr]: https://reddit.com/r/DataHoarder/&#160;<a class="footnote-backref" href="#fnref:recently" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+    </div><!-- /.entry-content -->
+
+  </article>
+</section>
+        <section id="extras" class="body">
+                <div class="social">
+                        <h2>social</h2>
+                        <ul>
+
+                            <li><a href="https://github.com/JustAPerson/">GitHub</a></li>
+                            <li><a href="mailto:jason@jpriest.me">Email</a></li>
+                        </ul>
+                </div><!-- /.social -->
+        </section><!-- /#extras -->
+</body>
+</html>
