@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  
+  <url>
+    <loc>https://jpriest.me/</loc>
+    <lastmod>2019-12-23T00:00:00+00:00</lastmod>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://jpriest.me/post/achieving-a-static-ip-using-a-free-proxy/</loc>
+    <lastmod>2019-12-23T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://jpriest.me/posts/</loc>
+    <lastmod>2019-12-23T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://jpriest.me/post/using-setxkbmap/</loc>
+    <lastmod>2019-12-17T00:00:00+00:00</lastmod>
+  </url>
+  
+  <url>
+    <loc>https://jpriest.me/about/</loc>
+    <priority>0</priority>
+  </url>
+  
+  <url>
+    <loc>https://jpriest.me/categories/</loc>
+  </url>
+  
+  <url>
+    <loc>https://jpriest.me/tags/</loc>
+  </url>
+  
+</urlset>

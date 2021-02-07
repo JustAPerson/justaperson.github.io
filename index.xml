@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Jason Priest</title>
+    <link>https://jpriest.me/</link>
+    <description>Recent content on Jason Priest</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-US</language>
+    <lastBuildDate>Mon, 23 Dec 2019 00:00:00 +0000</lastBuildDate>
+    
+	<atom:link href="https://jpriest.me/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    
+    <item>
+      <title>Achieving a Static IP Using a Free Proxy</title>
+      <link>https://jpriest.me/post/achieving-a-static-ip-using-a-free-proxy/</link>
+      <pubDate>Mon, 23 Dec 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://jpriest.me/post/achieving-a-static-ip-using-a-free-proxy/</guid>
+      <description>At MIT, it&amp;rsquo;s fairly trivial to get a static IP address (and subdomain under mit.edu) for a specific MAC address connected to their wired Ethernet network just by emailing the IT department. Having a static IP address is very convenient for hosting websites and game servers, but more importantly it allows easy access to my strong desktop computer from anywhere via SSH. Sadly, my living situation has changed and I no longer have a simple static IP address for my desktop.</description>
+    </item>
+    
+    
+    
+    <item>
+      <title>Using `setxkbmap`</title>
+      <link>https://jpriest.me/post/using-setxkbmap/</link>
+      <pubDate>Tue, 17 Dec 2019 00:00:00 +0000</pubDate>
+      
+      <guid>https://jpriest.me/post/using-setxkbmap/</guid>
+      <description>After using Ubuntu for a number of years, I was quite accustomed to customizing my desktop experience using the GUI tools provided by GNOME. In the past year, I have been using awesome, a tiling window manager. Some things can still be configured using the gnome-control-center application, but I have also been experimenting more with using the underlying technologies that GNOME uses behind the scenes.
+Today, I wanted to change my keyboard settings so I can type moderately fancy letters like éàîöŭ.</description>
+    </item>
+    
+    
+    
+    
+  </channel>
+</rss>
