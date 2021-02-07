@@ -1,0 +1,45 @@
+baseURL = "https://jpriest.me"
+title = "Jason Priest"
+theme = "etch"
+languageCode = "en-US"
+enableInlineShortcodes = true
+pygmentsCodeFences = true
+pygmentsUseClasses = true
+enableEmoji = true
+# enableInlineShortcodes = true
+
+[params]
+  description = "A blog about systems programming."
+  copyright = "Copyright © 2021 Jason Priest"
+  dark = "auto"
+  highlight = true
+
+[menu]
+  # [[menu.main]]
+  #   identifier = "posts"
+  #   name = "posts"
+  #   title = "posts"
+  #   url = "/"
+  #   weight = 10
+
+  [[menu.main]]
+    identifier = "about"
+    name = "about"
+    title = "about"
+    url = "/about/"
+    weight = 15
+
+  [[menu.main]]
+    identifier = 'github'
+    name = 'github'
+    title = 'github'
+    url = 'https://github.com/justaperson/'
+    weight = 20
+
+
+[permalinks]
+  posts = "/post/:title/"
+
+[markup.goldmark.renderer]
+  # Allows HTML in Markdown
+  unsafe = true
